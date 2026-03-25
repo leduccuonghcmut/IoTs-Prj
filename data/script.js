@@ -1,182 +1,115 @@
-// ==================== WEBSOCKET ====================
-var gateway = `ws://${window.location.hostname}/ws`;
-var websocket;
+function showSection(sectionId, event) {
+  document.querySelectorAll(".section").forEach(section => {
+    section.style.display = "none";
+  });
 
-window.addEventListener('load', onLoad);
+  const target = document.getElementById(sectionId);
+  if (target) target.style.display = "block";
 
-function onLoad(event) {
-    initWebSocket();
+  document.querySelectorAll(".nav-item").forEach(item => {
+    item.classList.remove("active");
+  });
+
+  if (event) event.currentTarget.classList.add("active");
 }
 
-function onOpen(event) {
-    console.log('Connection opened');
-}
+async function loadSensors() {
+  try {
+    const response = await fetch("/sensors?t=" + Date.now(), {
+      method: "GET",
+      cache: "no-store"
+    });
 
-function onClose(event) {
-    console.log('Connection closed');
-    setTimeout(initWebSocket, 2000);
-}
-
-function initWebSocket() {
-    console.log('Trying to open a WebSocket connection…');
-    websocket = new WebSocket(gateway);
-    websocket.onopen = onOpen;
-    websocket.onclose = onClose;
-    websocket.onmessage = onMessage;
-}
-
-function Send_Data(data) {
-    if (websocket && websocket.readyState === WebSocket.OPEN) {
-        websocket.send(data);
-        console.log("📤 Gửi:", data);
-    } else {
-        console.warn("⚠️ WebSocket chưa sẵn sàng!");
-        alert("⚠️ WebSocket chưa kết nối!");
+    if (!response.ok) {
+      throw new Error("HTTP " + response.status);
     }
+
+    const data = await response.json();
+    console.log("Sensor data:", data);
+
+    const tempEl = document.getElementById("temp");
+    const humEl = document.getElementById("hum");
+    const led1El = document.getElementById("led1");
+    const led2El = document.getElementById("led2");
+    const deviceIpEl = document.getElementById("deviceIp");
+    const wifiStatusEl = document.getElementById("wifiStatus");
+
+    if (tempEl) tempEl.textContent = Number(data.temp).toFixed(1) + " °C";
+    if (humEl) humEl.textContent = Number(data.hum).toFixed(1) + " %";
+    if (led1El) led1El.textContent = data.led1 || "--";
+    if (led2El) led2El.textContent = data.led2 || "--";
+    if (deviceIpEl) deviceIpEl.textContent = window.location.host;
+    if (wifiStatusEl) wifiStatusEl.textContent = "Đang hoạt động";
+  } catch (error) {
+    console.error("Không lấy được dữ liệu cảm biến:", error);
+
+    const tempEl = document.getElementById("temp");
+    const humEl = document.getElementById("hum");
+    const wifiStatusEl = document.getElementById("wifiStatus");
+
+    if (tempEl) tempEl.textContent = "Lỗi";
+    if (humEl) humEl.textContent = "Lỗi";
+    if (wifiStatusEl) wifiStatusEl.textContent = "Mất kết nối";
+  }
 }
 
-function onMessage(event) {
-    console.log("📩 Nhận:", event.data);
-    try {
-        var data = JSON.parse(event.data);
-        // Có thể thêm xử lý riêng nếu cần (ví dụ cập nhật trạng thái)
-    } catch (e) {
-        console.warn("Không phải JSON hợp lệ:", event.data);
+async function toggleRelay(relayNumber) {
+  try {
+    const response = await fetch(`/toggle?led=${relayNumber}&t=${Date.now()}`, {
+      method: "GET",
+      cache: "no-store"
+    });
+
+    if (!response.ok) {
+      throw new Error("HTTP " + response.status);
     }
+
+    const data = await response.json();
+    console.log("Toggle response:", data);
+
+    const led1El = document.getElementById("led1");
+    const led2El = document.getElementById("led2");
+
+    if (led1El) led1El.textContent = data.led1 || "--";
+    if (led2El) led2El.textContent = data.led2 || "--";
+  } catch (error) {
+    console.error("Toggle relay lỗi:", error);
+    alert("Không điều khiển được relay");
+  }
 }
 
+async function connectWifi(event) {
+  event.preventDefault();
 
-// ==================== UI NAVIGATION ====================
-let relayList = [];
-let deleteTarget = null;
+  const ssid = document.getElementById("ssid")?.value?.trim() || "";
+  const password = document.getElementById("password")?.value || "";
 
-function showSection(id, event) {
-    document.querySelectorAll('.section').forEach(sec => sec.style.display = 'none');
-    document.getElementById(id).style.display = id === 'settings' ? 'flex' : 'block';
-    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-    event.currentTarget.classList.add('active');
+  if (!ssid) {
+    alert("Vui lòng nhập SSID");
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `/connect?ssid=${encodeURIComponent(ssid)}&pass=${encodeURIComponent(password)}&t=${Date.now()}`,
+      { method: "GET", cache: "no-store" }
+    );
+
+    const text = await response.text();
+    console.log("Connect response:", text);
+    alert("Thiết bị đang thử kết nối Wi-Fi");
+  } catch (error) {
+    console.error("Kết nối Wi-Fi lỗi:", error);
+    alert("Không gửi được cấu hình Wi-Fi");
+  }
 }
 
+window.addEventListener("DOMContentLoaded", () => {
+  const settingsForm = document.getElementById("settingsForm");
+  if (settingsForm) {
+    settingsForm.addEventListener("submit", connectWifi);
+  }
 
-// ==================== HOME GAUGES ====================
-window.onload = function () {
-    const gaugeTemp = new JustGage({
-        id: "gauge_temp",
-        value: 26,
-        min: -10,
-        max: 50,
-        donut: true,
-        pointer: false,
-        gaugeWidthScale: 0.25,
-        gaugeColor: "transparent",
-        levelColorsGradient: true,
-        levelColors: ["#00BCD4", "#4CAF50", "#FFC107", "#F44336"]
-    });
-
-    const gaugeHumi = new JustGage({
-        id: "gauge_humi",
-        value: 60,
-        min: 0,
-        max: 100,
-        donut: true,
-        pointer: false,
-        gaugeWidthScale: 0.25,
-        gaugeColor: "transparent",
-        levelColorsGradient: true,
-        levelColors: ["#42A5F5", "#00BCD4", "#0288D1"]
-    });
-
-    setInterval(() => {
-        gaugeTemp.refresh(Math.floor(Math.random() * 15) + 20);
-        gaugeHumi.refresh(Math.floor(Math.random() * 40) + 40);
-    }, 3000);
-};
-
-
-// ==================== DEVICE FUNCTIONS ====================
-function openAddRelayDialog() {
-    document.getElementById('addRelayDialog').style.display = 'flex';
-}
-function closeAddRelayDialog() {
-    document.getElementById('addRelayDialog').style.display = 'none';
-}
-function saveRelay() {
-    const name = document.getElementById('relayName').value.trim();
-    const gpio = document.getElementById('relayGPIO').value.trim();
-    if (!name || !gpio) return alert("⚠️ Please fill all fields!");
-    relayList.push({ id: Date.now(), name, gpio, state: false });
-    renderRelays();
-    closeAddRelayDialog();
-}
-function renderRelays() {
-    const container = document.getElementById('relayContainer');
-    container.innerHTML = "";
-    relayList.forEach(r => {
-        const card = document.createElement('div');
-        card.className = 'device-card';
-        card.innerHTML = `
-      <i class="fa-solid fa-bolt device-icon"></i>
-      <h3>${r.name}</h3>
-      <p>GPIO: ${r.gpio}</p>
-      <button class="toggle-btn ${r.state ? 'on' : ''}" onclick="toggleRelay(${r.id})">
-        ${r.state ? 'ON' : 'OFF'}
-      </button>
-      <i class="fa-solid fa-trash delete-icon" onclick="showDeleteDialog(${r.id})"></i>
-    `;
-        container.appendChild(card);
-    });
-}
-function toggleRelay(id) {
-    const relay = relayList.find(r => r.id === id);
-    if (relay) {
-        relay.state = !relay.state;
-        const relayJSON = JSON.stringify({
-            page: "device",
-            value: {
-                name: relay.name,
-                status: relay.state ? "ON" : "OFF",
-                gpio: relay.gpio
-            }
-        });
-        Send_Data(relayJSON);
-        renderRelays();
-    }
-}
-function showDeleteDialog(id) {
-    deleteTarget = id;
-    document.getElementById('confirmDeleteDialog').style.display = 'flex';
-}
-function closeConfirmDelete() {
-    document.getElementById('confirmDeleteDialog').style.display = 'none';
-}
-function confirmDelete() {
-    relayList = relayList.filter(r => r.id !== deleteTarget);
-    renderRelays();
-    closeConfirmDelete();
-}
-
-
-// ==================== SETTINGS FORM (BỔ SUNG) ====================
-document.getElementById("settingsForm").addEventListener("submit", function (e) {
-    e.preventDefault();
-
-    const ssid = document.getElementById("ssid").value.trim();
-    const password = document.getElementById("password").value.trim();
-    const token = document.getElementById("token").value.trim();
-    const server = document.getElementById("server").value.trim();
-    const port = document.getElementById("port").value.trim();
-
-    const settingsJSON = JSON.stringify({
-        page: "setting",
-        value: {
-            ssid: ssid,
-            password: password,
-            token: token,
-            server: server,
-            port: port
-        }
-    });
-
-    Send_Data(settingsJSON);
-    alert("✅ Cấu hình đã được gửi đến thiết bị!");
+  loadSensors();
+  setInterval(loadSensors, 2000);
 });
