@@ -1,26 +1,54 @@
 #include "neo_blinky.h"
+#include "global.h"
 
-
-void neo_blinky(void *pvParameters){
-
+void neo_blinky(void *pvParameters)
+{
     Adafruit_NeoPixel strip(LED_COUNT, NEO_PIN, NEO_GRB + NEO_KHZ800);
+
     strip.begin();
-    // Set all pixels to off to start
     strip.clear();
     strip.show();
 
-    while(1) {                          
-        strip.setPixelColor(0, strip.Color(255, 0, 0)); // Set pixel 0 to red
-        strip.show(); // Update the strip
+    uint8_t r = 255, g = 180, b = 0; 
+    int delayMs = 500;
 
-        // Wait for 500 milliseconds
-        vTaskDelay(500);
+    while (1)
+    {
+        if (xNeoHumiSemaphore != NULL)
+        {
+            if (xSemaphoreTake(xNeoHumiSemaphore, 0) == pdTRUE)
+            {
+                switch (g_humiLevel)
+                {
+                    case HUMI_DRY:
+                        r = 255; g = 0; b = 0;
+                        delayMs = 200; 
+                        Serial.println("[NEO] DRY -> RED FAST");
+                        break;
 
-        // Set the pixel to off
-        strip.setPixelColor(0, strip.Color(0, 0, 0)); // Turn pixel 0 off
-        strip.show(); // Update the strip
+                    case HUMI_NORMAL:
+                        r = 255; g = 180; b = 0;
+                        delayMs = 500; 
+                        Serial.println("[NEO] NORMAL -> YELLOW");
+                        break;
 
-        // Wait for another 500 milliseconds
-        vTaskDelay(500);
+                    case HUMI_WET:
+                        r = 0; g = 255; b = 0;
+                        delayMs = 1000; 
+                        Serial.println("[NEO] WET -> GREEN SLOW");
+                        break;
+                }
+            }
+        }
+
+        // ===== BLINK ON =====
+        strip.setPixelColor(0, strip.Color(r, g, b));
+        strip.show();
+        vTaskDelay(pdMS_TO_TICKS(delayMs));
+
+        // ===== BLINK OFF =====
+        strip.setPixelColor(0, strip.Color(0, 0, 0));
+        strip.show();
+        vTaskDelay(pdMS_TO_TICKS(delayMs));
     }
 }

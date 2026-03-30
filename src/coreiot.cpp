@@ -90,12 +90,13 @@ void setup_coreiot(){
   //   Serial.print(".");
   // }
 
-  while(1){
-    if (xSemaphoreTake(xBinarySemaphoreInternet, portMAX_DELAY)) {
-      break;
+  while (1) {
+    if (xBinarySemaphoreInternet != NULL) {
+      if (xSemaphoreTake(xBinarySemaphoreInternet, portMAX_DELAY) == pdTRUE) {
+        break;
+      }
     }
-    delay(500);
-    Serial.print(".");
+    vTaskDelay(pdMS_TO_TICKS(200));
   }
 
 
