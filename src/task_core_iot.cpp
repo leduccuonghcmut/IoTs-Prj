@@ -48,7 +48,10 @@ void coreiot_thingsboard_task(void *pvParameters)
             float temperature = 0.0f;
             float humidity = 0.0f;
             float tinymlScore = 0.0f;
+            float mnistConfidence = 0.0f;
             TinyMLState tinymlState = TINYML_IDLE;
+            int mnistDigit = -1;
+            bool mnistReady = false;
 
             if (ctx->configMutex != NULL && xSemaphoreTake(ctx->configMutex, portMAX_DELAY) == pdTRUE)
             {
@@ -64,6 +67,9 @@ void coreiot_thingsboard_task(void *pvParameters)
                 humidity = ctx->humidity;
                 tinymlScore = ctx->tinymlScore;
                 tinymlState = ctx->tinymlState;
+                mnistConfidence = ctx->mnistConfidence;
+                mnistDigit = ctx->mnistDigit;
+                mnistReady = ctx->mnistReady;
                 xSemaphoreGive(ctx->stateMutex);
             }
 
@@ -85,7 +91,10 @@ void coreiot_thingsboard_task(void *pvParameters)
             tb.sendTelemetryData("temperature", temperature);
             tb.sendTelemetryData("humidity", humidity);
             tb.sendTelemetryData("tinyml_score", tinymlScore);
+            tb.sendTelemetryData("mnist_confidence", mnistConfidence);
+            tb.sendTelemetryData("mnist_digit", mnistDigit);
             tb.sendAttributeData("tinyml_state", tinyMLStateToString(tinymlState));
+            tb.sendAttributeData("mnist_ready", mnistReady);
             tb.sendAttributeData("rssi", WiFi.RSSI());
             tb.sendAttributeData("channel", WiFi.channel());
             tb.sendAttributeData("bssid", WiFi.BSSIDstr().c_str());

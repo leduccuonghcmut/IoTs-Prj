@@ -53,6 +53,7 @@ typedef struct
     SemaphoreHandle_t internetSemaphore;
     SemaphoreHandle_t stateMutex;
     SemaphoreHandle_t configMutex;
+    SemaphoreHandle_t serialMutex;
 
     TempLevel tempLevel;
     HumiLevel humiLevel;
@@ -61,16 +62,21 @@ typedef struct
 
     bool wifiConnected;
     bool tinymlReady;
+    bool mnistReady;
 
     float temperature;
     float humidity;
     float tinymlScore;
+    float mnistConfidence;
+    int mnistDigit;
 
     String wifiSsid;
     String wifiPass;
     String coreIotToken;
     String coreIotServer;
     String coreIotPort;
+    String cameraHost;
+    String mnistStatus;
 
     String apSsid;
     String apPassword;

@@ -17,44 +17,41 @@
     <aside class="sidebar glass">
       <div>
         <div class="brand">
-          <div class="brand-icon">📡</div>
+          <div class="brand-icon">ESP</div>
           <div>
             <h2>ESP32 AP</h2>
             <p>Smart Control Panel</p>
           </div>
         </div>
-<nav class="nav-menu">
-  <button class="nav-item active" onclick="showSection('dashboard', event)">
-    <span>🏠</span>
-    <span>Tổng quan</span>
-  </button>
 
-  <button class="nav-item" onclick="showSection('device', event)">
-    <span>🎛️</span>
-    <span>Điều khiển thiết bị</span>
-  </button>
-
-  <button class="nav-item" onclick="showSection('info', event)">
-    <span>ℹ️</span>
-    <span>Thông tin</span>
-  </button>
-
-  <button class="nav-item" onclick="showSection('settings', event)">
-    <span>📶</span>
-    <span>Wi-Fi</span>
-  </button>
-
-  <button class="nav-item" onclick="showSection('camera', event)">
-    <span>📷</span>
-    <span>Camera Detection</span>
-  </button>
-</nav>
+        <nav class="nav-menu">
+          <button class="nav-item active" data-section="dashboard">
+            <span>Home</span>
+            <span>Tong quan</span>
+          </button>
+          <button class="nav-item" data-section="device">
+            <span>IO</span>
+            <span>Dieu khien</span>
+          </button>
+          <button class="nav-item" data-section="info">
+            <span>Info</span>
+            <span>Thong tin</span>
+          </button>
+          <button class="nav-item" data-section="settings">
+            <span>WiFi</span>
+            <span>Cau hinh</span>
+          </button>
+          <button class="nav-item" data-section="camera">
+            <span>Cam</span>
+            <span>MNIST Edge</span>
+          </button>
+        </nav>
       </div>
 
       <div class="sidebar-footer">
         <div class="status-pill">
           <span class="dot"></span>
-          <span id="wifiStatus">Đang hoạt động</span>
+          <span id="wifiStatus">Dang hoat dong</span>
         </div>
       </div>
     </aside>
@@ -64,38 +61,37 @@
         <div class="hero glass">
           <div>
             <p class="eyebrow">ESP32 ACCESS POINT MODE</p>
-            <h1>Hệ thống giám sát và điều khiển thông minh</h1>
+            <h1>He thong giam sat va dieu khien thong minh</h1>
             <p class="hero-text">
-              Theo dõi môi trường theo thời gian thực, điều khiển thiết bị trực tiếp
-              và cấu hình Wi-Fi nhanh chóng qua giao diện web.
+              Theo doi nhiet do, do am, TinyML va trang thai thiet bi trong thoi gian thuc.
             </p>
           </div>
-          <button class="refresh-btn" onclick="loadSensors()">Làm mới dữ liệu</button>
+          <button class="refresh-btn" id="refreshButton">Lam moi du lieu</button>
         </div>
 
         <div class="sensor-grid">
           <div class="card sensor-card temp-card glass">
             <div class="sensor-card-top">
-              <div class="sensor-icon-wrap">🌡️</div>
+              <div class="sensor-icon-wrap">T</div>
               <div>
-                <p class="card-label">Nhiệt độ</p>
+                <p class="card-label">Nhiet do</p>
                 <h3>Environment Temperature</h3>
               </div>
             </div>
             <div id="temp" class="sensor-value">--</div>
-            <div class="sensor-meta">Đơn vị đo: °C</div>
+            <div class="sensor-meta">Don vi do: degC</div>
           </div>
 
           <div class="card sensor-card hum-card glass">
             <div class="sensor-card-top">
-              <div class="sensor-icon-wrap">💧</div>
+              <div class="sensor-icon-wrap">H</div>
               <div>
-                <p class="card-label">Độ ẩm</p>
+                <p class="card-label">Do am</p>
                 <h3>Environment Humidity</h3>
               </div>
             </div>
             <div id="hum" class="sensor-value">--</div>
-            <div class="sensor-meta">Đơn vị đo: %</div>
+            <div class="sensor-meta">Don vi do: %</div>
           </div>
         </div>
 
@@ -123,7 +119,7 @@
                 <span>0.50</span>
                 <span>1.00</span>
               </div>
-              <p id="tinymlDesc" class="tinyml-desc">TinyML Ä‘ang chá» dá»¯ liá»‡u cáº£m biáº¿n.</p>
+              <p id="tinymlDesc" class="tinyml-desc">TinyML dang cho du lieu cam bien.</p>
             </div>
           </div>
         </div>
@@ -132,23 +128,45 @@
           <div class="card quick-card glass">
             <div class="quick-top">
               <div>
-                <p class="card-label">Thiết bị 1</p>
-                <h3>Device 1</h3>
+                <p class="card-label">Thiet bi 1</p>
+                <h3>Relay 1</h3>
               </div>
               <div id="led1Badge" class="device-badge off">OFF</div>
             </div>
-            <p class="quick-desc">Điều khiển relay / LED / quạt / bơm theo ứng dụng của nhóm.</p>
+            <p class="quick-desc">Trang thai relay 1 duoc cap nhat theo thoi gian thuc.</p>
           </div>
 
           <div class="card quick-card glass">
             <div class="quick-top">
               <div>
-                <p class="card-label">Thiết bị 2</p>
-                <h3>Device 2</h3>
+                <p class="card-label">Thiet bi 2</p>
+                <h3>Relay 2</h3>
               </div>
               <div id="led2Badge" class="device-badge off">OFF</div>
             </div>
-            <p class="quick-desc">Theo dõi nhanh trạng thái thiết bị đang được điều khiển từ web.</p>
+            <p class="quick-desc">Trang thai relay 2 duoc dong bo tu backend.</p>
+          </div>
+
+          <div class="card quick-card glass">
+            <div class="quick-top">
+              <div>
+                <p class="card-label">Cua</p>
+                <h3>Door State</h3>
+              </div>
+              <div id="doorOverviewBadge" class="device-badge off">--</div>
+            </div>
+            <p class="quick-desc">Theo doi nhanh trang thai dong mo cua.</p>
+          </div>
+
+          <div class="card quick-card glass">
+            <div class="quick-top">
+              <div>
+                <p class="card-label">Quat</p>
+                <h3>Fan State</h3>
+              </div>
+              <div id="fanOverviewBadge" class="device-badge off">OFF</div>
+            </div>
+            <p class="quick-desc">Theo doi fan va toc do hien tai ngay tren tong quan.</p>
           </div>
         </div>
       </section>
@@ -157,108 +175,94 @@
         <div class="section-head device-head">
           <div>
             <p class="eyebrow">DEVICE CONTROL</p>
-            <h1>Điều khiển thiết bị</h1>
-            <p class="subtext">
-              Quản lý trạng thái đèn, cửa và quạt trực tiếp từ giao diện web.
-            </p>
+            <h1>Dieu khien thiet bi</h1>
+            <p class="subtext">Quan ly relay, cua va quat truc tiep tu giao dien web.</p>
           </div>
         </div>
 
         <div class="device-grid">
-
-          <!-- Device 1 -->
           <div class="device-card glass">
             <div class="device-top">
-              <div class="device-icon lamp">💡</div>
+              <div class="device-icon lamp">1</div>
               <div>
-                <h3>Thiết bị 1</h3>
-                <p>Relay 1 / LED 1 / Đèn / Bơm</p>
+                <h3>Thiet bi 1</h3>
+                <p>Relay 1 / LED 1 / Den / Bom</p>
               </div>
             </div>
 
             <div class="device-status-row">
-              <span>Trạng thái</span>
+              <span>Trang thai</span>
               <span id="led1" class="status-badge off">OFF</span>
             </div>
 
-            <button class="btn btn-primary btn-full" onclick="setDevice(1)">
-              Bật / Tắt Thiết bị 1
-            </button>
+            <button class="btn btn-primary btn-full" id="toggleDevice1">Bat / Tat thiet bi 1</button>
           </div>
 
-          <!-- Device 2 -->
           <div class="device-card glass">
             <div class="device-top">
-              <div class="device-icon power">⚡</div>
+              <div class="device-icon power">2</div>
               <div>
-                <h3>Thiết bị 2</h3>
-                <p>Relay 2 / LED 2 / Thiết bị phụ</p>
+                <h3>Thiet bi 2</h3>
+                <p>Relay 2 / LED 2 / Thiet bi phu</p>
               </div>
             </div>
 
             <div class="device-status-row">
-              <span>Trạng thái</span>
+              <span>Trang thai</span>
               <span id="led2" class="status-badge off">OFF</span>
             </div>
 
-            <button class="btn btn-primary btn-full" onclick="setDevice(2)">
-              Bật / Tắt Thiết bị 2
-            </button>
+            <button class="btn btn-primary btn-full" id="toggleDevice2">Bat / Tat thiet bi 2</button>
           </div>
 
-          <!-- Door Control -->
           <div class="device-card glass">
             <div class="device-top">
-              <div class="device-icon door">🚪</div>
+              <div class="device-icon door">D</div>
               <div>
-                <h3>Điều khiển cửa</h3>
-                <p>Mở hoặc đóng cửa trực tiếp từ web</p>
+                <h3>Dieu khien cua</h3>
+                <p>Mo hoac dong cua truc tiep tu web</p>
               </div>
             </div>
 
             <div class="device-status-row">
-              <span>Trạng thái cửa</span>
+              <span>Trang thai cua</span>
               <span id="doorState" class="status-badge off">--</span>
             </div>
 
             <div class="door-controls">
-              <button class="btn btn-success" onclick="controlDoor('open')">Mở cửa</button>
-              <button class="btn btn-danger" onclick="controlDoor('close')">Đóng cửa</button>
+              <button class="btn btn-success" id="openDoor">Mo cua</button>
+              <button class="btn btn-danger" id="closeDoor">Dong cua</button>
             </div>
           </div>
 
-          <!-- Fan Control -->
           <div class="device-card glass fan-card">
             <div class="device-top">
-              <div class="device-icon fan">🌀</div>
+              <div class="device-icon fan">F</div>
               <div>
-                <h3>Điều khiển quạt</h3>
-                <p>Bật tắt và thay đổi tốc độ quạt</p>
+                <h3>Dieu khien quat</h3>
+                <p>Bat tat va thay doi toc do quat</p>
               </div>
             </div>
 
             <div class="device-status-row">
-              <span>Trạng thái</span>
+              <span>Trang thai</span>
               <span id="fanState" class="status-badge off">OFF</span>
             </div>
 
             <div class="fan-action-row">
-              <button class="btn btn-primary" onclick="setFan('on')">Fan ON</button>
-              <button class="btn btn-secondary" onclick="setFan('off')">Fan OFF</button>
+              <button class="btn btn-primary" id="fanOnButton">Fan ON</button>
+              <button class="btn btn-secondary" id="fanOffButton">Fan OFF</button>
             </div>
 
             <div class="fan-speed-box">
               <div class="fan-speed-label">
-                <span>Tốc độ quạt</span>
+                <span>Toc do quat</span>
                 <strong id="fanSpeedValue">0%</strong>
               </div>
 
-              <input id="fanSpeedSlider" class="fan-slider" type="range" min="0" max="100" value="0" step="10"
-                oninput="document.getElementById('fanSpeedValue').textContent = this.value + '%'"
-                onchange="setFanSpeed(this.value)" />
+              <input id="fanSpeedSlider" class="fan-slider" type="range" min="0" max="100" value="0" step="10" />
             </div>
           </div>
-
         </div>
       </section>
 
@@ -266,22 +270,22 @@
         <div class="section-head">
           <div>
             <p class="eyebrow">SYSTEM INFORMATION</p>
-            <h1>Thông tin hệ thống</h1>
-            <p class="subtext">Các thông tin cơ bản về chế độ hoạt động hiện tại của ESP32.</p>
+            <h1>Thong tin he thong</h1>
+            <p class="subtext">Thong tin co ban ve dia chi truy cap va che do hoat dong hien tai cua ESP32.</p>
           </div>
         </div>
 
         <div class="info-grid">
           <div class="card info-card glass">
-            <p class="card-label">Địa chỉ truy cập</p>
+            <p class="card-label">Dia chi truy cap</p>
             <h3 id="deviceIp">--</h3>
-            <p>Địa chỉ hiện tại để truy cập giao diện web từ điện thoại hoặc máy tính.</p>
+            <p>Dia chi hien tai de truy cap giao dien web tu dien thoai hoac may tinh.</p>
           </div>
 
           <div class="card info-card glass">
-            <p class="card-label">Chế độ mạng</p>
-            <h3>Access Point Mode</h3>
-            <p>ESP32 đang phát Wi-Fi riêng và chờ kết nối từ người dùng.</p>
+            <p class="card-label">Che do mang</p>
+            <h3>Access Point / Station</h3>
+            <p>ESP32 co the phat AP rieng hoac ket noi vao WiFi san co.</p>
           </div>
         </div>
       </section>
@@ -290,92 +294,110 @@
         <div class="section-head">
           <div>
             <p class="eyebrow">WIFI CONFIGURATION</p>
-            <h1>Cấu hình Wi-Fi</h1>
-            <p class="subtext">Chọn nhanh mạng Wi-Fi đang có sẵn và nhập mật khẩu để kết nối.</p>
+            <h1>Cau hinh WiFi</h1>
+            <p class="subtext">Chon nhanh mang WiFi va gui cau hinh sang ESP32.</p>
           </div>
-          <button class="btn btn-secondary" onclick="scanWifi()">Quét lại Wi-Fi</button>
+          <button class="btn btn-secondary" id="scanWifiButton">Quet lai WiFi</button>
         </div>
 
         <div class="settings-layout">
           <div class="card glass wifi-panel">
             <div class="panel-head">
-              <h3>Mạng Wi-Fi khả dụng</h3>
-              <p>Chạm vào một mạng để tự động điền SSID.</p>
+              <h3>Mang WiFi kha dung</h3>
+              <p>Cham vao mot mang de tu dong dien SSID.</p>
             </div>
             <div class="wifi-list" id="wifiList"></div>
           </div>
 
           <div class="card glass settings-card">
             <div class="panel-head">
-              <h3>Kết nối mạng</h3>
-              <p>Nhập thông tin mạng Wi-Fi để chuyển sang STA mode.</p>
+              <h3>Ket noi mang</h3>
+              <p>Nhap thong tin WiFi de chuyen sang STA mode.</p>
             </div>
 
             <form id="settingsForm">
               <div class="form-group">
-                <label for="ssid">Tên Wi-Fi (SSID)</label>
-                <input type="text" id="ssid" placeholder="Nhập tên Wi-Fi" required />
+                <label for="ssid">Ten WiFi (SSID)</label>
+                <input type="text" id="ssid" placeholder="Nhap ten WiFi" required />
               </div>
 
               <div class="form-group">
-                <label for="password">Mật khẩu</label>
-                <input type="password" id="password" placeholder="Nhập mật khẩu Wi-Fi" />
+                <label for="password">Mat khau</label>
+                <input type="password" id="password" placeholder="Nhap mat khau WiFi" />
               </div>
 
               <div class="form-actions">
-                <button type="submit" class="btn btn-primary btn-large">Kết nối Wi-Fi</button>
+                <button type="submit" class="btn btn-primary btn-large">Ket noi WiFi</button>
               </div>
             </form>
           </div>
         </div>
       </section>
-<section id="camera" class="section" style="display:none;">
-  <div class="section-head">
-    <div>
-      <p class="eyebrow">CAMERA DETECTION</p>
-      <h1>Cấu hình Camera</h1>
-      <p class="subtext">Nhập IP PC để hiển thị camera detection từ server.</p>
-    </div>
-  </div>
 
-  <div class="device-grid">
-    <div class="card glass">
-      <h3 style="margin-bottom:10px;">🔗 Kết nối Camera PC</h3>
+      <section id="camera" class="section" style="display:none;">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">CAMERA DETECTION</p>
+            <h1>Camera MNIST tren bien</h1>
+            <p class="subtext">
+              Browser hien thi stream tu PC, con ESP32 se tu lay snapshot de chay nhan dien chu so.
+            </p>
+          </div>
+        </div>
 
-      <div style="display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap;">
-        <input
-          id="pcIpInput"
-          type="text"
-          placeholder="VD: 192.168.1.100:5000"
-          style="flex:1; min-width:240px; padding:10px 14px; border-radius:10px; border:none; outline:none;"
-        />
-      </div>
+        <div class="device-grid">
+          <div class="card glass">
+            <h3 class="camera-title">Ket noi Camera PC</h3>
+            <div class="camera-input-row">
+              <input id="pcIpInput" type="text" placeholder="VD: 192.168.1.100:5000" class="camera-input" />
+            </div>
 
-      <div style="display:flex; gap:10px; flex-wrap:wrap;">
-        <button class="btn btn-primary" onclick="savePcIp()">Lưu IP</button>
-        <button class="btn btn-success" onclick="connectCamera()">Kết nối</button>
-        <button class="btn btn-danger" onclick="disconnectCamera()">Ngắt</button>
-      </div>
+            <div class="camera-action-row">
+              <button class="btn btn-primary" id="savePcIpButton">Luu IP</button>
+              <button class="btn btn-success" id="connectCameraButton">Ket noi stream</button>
+              <button class="btn btn-danger" id="disconnectCameraButton">Ngat</button>
+            </div>
 
-      <p id="camStatus" style="margin-top:12px; opacity:0.85;">
-        Trạng thái: Chưa kết nối
-      </p>
-    </div>
+            <p id="camStatus" class="camera-status-text">Trang thai: Chua ket noi</p>
+          </div>
 
-    <div class="card glass">
-      <h3 style="margin-bottom:10px;">📷 Camera Detection Stream</h3>
+          <div class="card glass camera-mnist-card">
+            <div class="tinyml-head">
+              <div>
+                <p class="card-label">MNIST Edge Inference</p>
+                <h3>ESP32 Digit Recognition</h3>
+              </div>
+              <div id="mnistBadge" class="status-badge off">IDLE</div>
+            </div>
 
-      <div style="width:100%; text-align:center;">
-        <img
-          id="cameraView"
-          src=""
-          alt="Camera Stream"
-          style="width:100%; max-width:720px; min-height:240px; object-fit:contain; border-radius:12px; background:#000;"
-        />
-      </div>
-    </div>
-  </div>
-</section>
+            <div class="camera-mnist-grid">
+              <div class="camera-digit-wrap">
+                <div id="mnistDigit" class="camera-digit-value">--</div>
+                <div class="sensor-meta">Predicted digit</div>
+              </div>
+
+              <div class="camera-mnist-meta">
+                <div class="camera-meta-row">
+                  <span>Confidence</span>
+                  <strong id="mnistConfidence">--</strong>
+                </div>
+                <div class="camera-meta-row">
+                  <span>Source</span>
+                  <strong id="mnistSource">--</strong>
+                </div>
+                <p id="mnistStatusText" class="tinyml-desc">ESP32 dang cho cau hinh camera.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card glass">
+            <h3 class="camera-title">Camera Detection Stream</h3>
+            <div class="camera-preview">
+              <img id="cameraView" src="" alt="Camera Stream" class="camera-preview-image" />
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 

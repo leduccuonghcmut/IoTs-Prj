@@ -1,6 +1,21 @@
 #include "neo_blinky.h"
 #include "global.h"
 
+namespace
+{
+void logNeoState(AppContext *ctx, const char *message)
+{
+    if (ctx != NULL && ctx->serialMutex != NULL && xSemaphoreTake(ctx->serialMutex, pdMS_TO_TICKS(100)) == pdTRUE)
+    {
+        Serial.println(message);
+        xSemaphoreGive(ctx->serialMutex);
+        return;
+    }
+
+    Serial.println(message);
+}
+}
+
 void neo_blinky(void *pvParameters)
 {
     AppContext *ctx = static_cast<AppContext *>(pvParameters);
@@ -31,19 +46,19 @@ void neo_blinky(void *pvParameters)
                     case HUMI_DRY:
                         r = 255; g = 0; b = 0;
                         delayMs = 200; 
-                        Serial.println("[NEO] DRY -> RED FAST");
+                        logNeoState(ctx, "[NEO] DRY -> RED FAST");
                         break;
 
                     case HUMI_NORMAL:
                         r = 255; g = 180; b = 0;
                         delayMs = 500; 
-                        Serial.println("[NEO] NORMAL -> YELLOW");
+                        logNeoState(ctx, "[NEO] NORMAL -> YELLOW");
                         break;
 
                     case HUMI_WET:
                         r = 0; g = 255; b = 0;
                         delayMs = 1000; 
-                        Serial.println("[NEO] WET -> GREEN SLOW");
+                        logNeoState(ctx, "[NEO] WET -> GREEN SLOW");
                         break;
                 }
             }

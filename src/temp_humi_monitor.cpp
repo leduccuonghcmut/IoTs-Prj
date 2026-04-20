@@ -21,6 +21,20 @@ static HumiLevel classifyHumidity(float h)
   return HUMI_WET;
 }
 
+static const char *humiLevelToString(HumiLevel level)
+{
+  switch (level)
+  {
+    case HUMI_DRY:
+      return "DRY";
+    case HUMI_NORMAL:
+      return "NORMAL";
+    case HUMI_WET:
+    default:
+      return "WET";
+  }
+}
+
 void temp_humi_monitor(void *pvParameters)
 {
   AppContext *ctx = static_cast<AppContext *>(pvParameters);
@@ -64,7 +78,6 @@ void temp_humi_monitor(void *pvParameters)
     LCDState newLCDState = classifyState(temperature, humidity);
     HumiLevel newHumiLevel = classifyHumidity(humidity);
 
-    // cập nhật NeoPixel ngay cả lần đầu
     if (newHumiLevel != lastHumiLevel)
     {
       if (ctx != NULL && ctx->stateMutex != NULL && xSemaphoreTake(ctx->stateMutex, portMAX_DELAY) == pdTRUE)
@@ -81,7 +94,6 @@ void temp_humi_monitor(void *pvParameters)
       lastHumiLevel = newHumiLevel;
     }
 
-    // cập nhật LCD theo trạng thái mới
     if (newLCDState != lastLCDState)
     {
       switch (newLCDState)
@@ -108,23 +120,20 @@ void temp_humi_monitor(void *pvParameters)
       lastLCDState = newLCDState;
     }
 
-    Serial.print("Temp: ");
-    Serial.print(temperature, 1);
-    Serial.print(" C | Humi: ");
-    Serial.print(humidity, 1);
-    Serial.print(" % | Level: ");
-
-    switch (newHumiLevel)
+    if (ctx != NULL && ctx->serialMutex != NULL && xSemaphoreTake(ctx->serialMutex, pdMS_TO_TICKS(100)) == pdTRUE)
     {
-      case HUMI_DRY:
-        Serial.println("DRY");
-        break;
-      case HUMI_NORMAL:
-        Serial.println("NORMAL");
-        break;
-      case HUMI_WET:
-        Serial.println("WET");
-        break;
+      Serial.printf("Temp: %.1f C | Humi: %.1f %% | Level: %s\n",
+                    temperature,
+                    humidity,
+                    humiLevelToString(newHumiLevel));
+      xSemaphoreGive(ctx->serialMutex);
+    }
+    else
+    {
+      Serial.printf("Temp: %.1f C | Humi: %.1f %% | Level: %s\n",
+                    temperature,
+                    humidity,
+                    humiLevelToString(newHumiLevel));
     }
 
     vTaskDelay(pdMS_TO_TICKS(2000));

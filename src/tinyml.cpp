@@ -45,6 +45,26 @@ namespace
             return "IDLE";
         }
     }
+
+    void logTinyMlLine(AppContext *ctx, float temperature, float humidity, float score, TinyMLState state)
+    {
+        if (ctx != NULL && ctx->serialMutex != NULL && xSemaphoreTake(ctx->serialMutex, pdMS_TO_TICKS(100)) == pdTRUE)
+        {
+            Serial.printf("[TinyML] Temp: %.1f C | Humi: %.1f %% | Score: %.6f | State: %s\n",
+                          temperature,
+                          humidity,
+                          score,
+                          tinyMLStateToString(state));
+            xSemaphoreGive(ctx->serialMutex);
+            return;
+        }
+
+        Serial.printf("[TinyML] Temp: %.1f C | Humi: %.1f %% | Score: %.6f | State: %s\n",
+                      temperature,
+                      humidity,
+                      score,
+                      tinyMLStateToString(state));
+    }
 }
 
 void tiny_ml_task(void *pvParameters)
@@ -119,14 +139,7 @@ void tiny_ml_task(void *pvParameters)
         if (ctx != NULL && ctx->ledTempSemaphore != NULL)
             xSemaphoreGive(ctx->ledTempSemaphore);
 
-        Serial.print("[TinyML] Temp: ");
-        Serial.print(temperature, 1);
-        Serial.print(" C | Humi: ");
-        Serial.print(humidity, 1);
-        Serial.print(" % | Score: ");
-        Serial.print(result, 6);
-        Serial.print(" | State: ");
-        Serial.println(tinyMLStateToString(newState));
+        logTinyMlLine(ctx, temperature, humidity, result, newState);
 
         vTaskDelay(kInferenceDelay);
     }

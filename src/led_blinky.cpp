@@ -18,6 +18,21 @@
 #define LED_GPIO 48
 #endif
 
+namespace
+{
+void logLedMode(AppContext *ctx, const char *message)
+{
+  if (ctx != NULL && ctx->serialMutex != NULL && xSemaphoreTake(ctx->serialMutex, pdMS_TO_TICKS(100)) == pdTRUE)
+  {
+    Serial.println(message);
+    xSemaphoreGive(ctx->serialMutex);
+    return;
+  }
+
+  Serial.println(message);
+}
+}
+
 void led_blinky(void *pvParameters)
 {
   AppContext *ctx = static_cast<AppContext *>(pvParameters);
@@ -42,19 +57,19 @@ void led_blinky(void *pvParameters)
         case TEMP_NORMAL:
           onTime = 1000;
           offTime = 1000;
-          Serial.println("LED mode: NORMAL - blink slow");
+          logLedMode(ctx, "LED mode: NORMAL - blink slow");
           break;
 
         case TEMP_WARNING:
           onTime = 300;
           offTime = 300;
-          Serial.println("LED mode: WARNING - blink medium");
+          logLedMode(ctx, "LED mode: WARNING - blink medium");
           break;
 
         case TEMP_CRITICAL:
           onTime = 100;
           offTime = 100;
-          Serial.println("LED mode: CRITICAL - blink fast");
+          logLedMode(ctx, "LED mode: CRITICAL - blink fast");
           break;
       }
     }

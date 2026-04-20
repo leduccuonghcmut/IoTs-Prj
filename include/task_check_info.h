@@ -8,6 +8,6 @@
 bool check_info_File(AppContext *ctx, bool check);
 void Load_info_File(AppContext *ctx);
 void Delete_info_File();
-void Save_info_File(String wifiSsid, String wifiPass, String coreIotToken, String coreIotServer, String coreIotPort);
+void Save_info_File(String wifiSsid, String wifiPass, String coreIotToken, String coreIotServer, String coreIotPort, String cameraHost = "");
 
 #endif

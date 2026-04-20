@@ -56,6 +56,24 @@ static const char *tinyMLStateDescription(TinyMLState state)
   }
 }
 
+static String boolToJson(bool value)
+{
+  return value ? "true" : "false";
+}
+
+static void streamFsFile(WebServer &server, const char *path, const char *contentType)
+{
+  File file = LittleFS.open(path, "r");
+  if (!file)
+  {
+    server.send(404, "text/plain", String("File not found: ") + path);
+    return;
+  }
+
+  server.streamFile(file, contentType);
+  file.close();
+}
+
 void startAP()
 {
 }
@@ -135,8 +153,13 @@ void main_server_task(void *pvParameters)
     float temperature = 0.0f;
     float humidity = 0.0f;
     float tinymlScore = 0.0f;
+    float mnistConfidence = 0.0f;
     bool tinymlReady = false;
+    bool mnistReady = false;
+    int mnistDigit = -1;
     TinyMLState tinymlState = TINYML_IDLE;
+    String mnistStatus = "Waiting for camera host.";
+    String cameraHost;
 
     if (ctx != NULL && ctx->stateMutex != NULL && xSemaphoreTake(ctx->stateMutex, portMAX_DELAY) == pdTRUE)
     {
@@ -145,22 +168,37 @@ void main_server_task(void *pvParameters)
       tinymlScore = ctx->tinymlScore;
       tinymlReady = ctx->tinymlReady;
       tinymlState = ctx->tinymlState;
+      mnistReady = ctx->mnistReady;
+      mnistDigit = ctx->mnistDigit;
+      mnistConfidence = ctx->mnistConfidence;
+      mnistStatus = ctx->mnistStatus;
       xSemaphoreGive(ctx->stateMutex);
     }
 
+    if (ctx != NULL && ctx->configMutex != NULL && xSemaphoreTake(ctx->configMutex, portMAX_DELAY) == pdTRUE)
+    {
+      cameraHost = ctx->cameraHost;
+      xSemaphoreGive(ctx->configMutex);
+    }
+
     String json = "{";
-    json += "\"led1\":" + String(state.led1 ? "true" : "false") + ",";
-    json += "\"led2\":" + String(state.led2 ? "true" : "false") + ",";
+    json += "\"led1\":" + boolToJson(state.led1) + ",";
+    json += "\"led2\":" + boolToJson(state.led2) + ",";
     json += "\"door\":\"" + String(state.doorOpen ? "open" : "closed") + "\",";
-    json += "\"fan_on\":" + String(state.fanOn ? "true" : "false") + ",";
+    json += "\"fan_on\":" + boolToJson(state.fanOn) + ",";
     json += "\"fan_speed\":" + String(state.fanSpeed) + ",";
     json += "\"fan\":\"" + String(state.fanOn ? "ON" : "OFF") + "\",";
     json += "\"temp\":" + String(temperature, 1) + ",";
     json += "\"hum\":" + String(humidity, 1) + ",";
-    json += "\"tinyml_ready\":" + String(tinymlReady ? "true" : "false") + ",";
+    json += "\"tinyml_ready\":" + boolToJson(tinymlReady) + ",";
     json += "\"tinyml_score\":" + String(tinymlScore, 6) + ",";
     json += "\"tinyml_state\":\"" + String(tinyMLStateToString(tinymlState)) + "\",";
-    json += "\"tinyml_desc\":\"" + String(tinyMLStateDescription(tinymlState)) + "\"";
+    json += "\"tinyml_desc\":\"" + String(tinyMLStateDescription(tinymlState)) + "\",";
+    json += "\"camera_host\":\"" + cameraHost + "\",";
+    json += "\"mnist_ready\":" + boolToJson(mnistReady) + ",";
+    json += "\"mnist_digit\":" + String(mnistDigit) + ",";
+    json += "\"mnist_confidence\":" + String(mnistConfidence, 4) + ",";
+    json += "\"mnist_status\":\"" + mnistStatus + "\"";
     json += "}";
     return json;
   };
@@ -183,12 +221,12 @@ void main_server_task(void *pvParameters)
   startApMode();
 
   server.enableCORS(true);
-  server.on("/", HTTP_GET, [&]() { File file = LittleFS.open("/index.html", "r"); server.streamFile(file, "text/html"); file.close(); });
-  server.on("/index.html", HTTP_GET, [&]() { File file = LittleFS.open("/index.html", "r"); server.streamFile(file, "text/html"); file.close(); });
-  server.on("/styles.css", HTTP_GET, [&]() { File file = LittleFS.open("/styles.css", "r"); server.streamFile(file, "text/css"); file.close(); });
-  server.on("/script.js", HTTP_GET, [&]() { File file = LittleFS.open("/script.js", "r"); server.streamFile(file, "application/javascript"); file.close(); });
-  server.on("/settings", HTTP_GET, [&]() { File file = LittleFS.open("/settings.html", "r"); server.streamFile(file, "text/html"); file.close(); });
-  server.on("/settings.html", HTTP_GET, [&]() { File file = LittleFS.open("/settings.html", "r"); server.streamFile(file, "text/html"); file.close(); });
+  server.on("/", HTTP_GET, [&]() { streamFsFile(server, "/index.html", "text/html"); });
+  server.on("/index.html", HTTP_GET, [&]() { streamFsFile(server, "/index.html", "text/html"); });
+  server.on("/styles.css", HTTP_GET, [&]() { streamFsFile(server, "/styles.css", "text/css"); });
+  server.on("/script.js", HTTP_GET, [&]() { streamFsFile(server, "/script.js", "application/javascript"); });
+  server.on("/settings", HTTP_GET, [&]() { streamFsFile(server, "/settings.html", "text/html"); });
+  server.on("/settings.html", HTTP_GET, [&]() { streamFsFile(server, "/settings.html", "text/html"); });
 
   server.on("/toggle", HTTP_GET, [&]()
   {
@@ -283,7 +321,7 @@ void main_server_task(void *pvParameters)
 
     String response = "{";
     response += "\"fan\":\"" + String(state.fanOn ? "on" : "off") + "\",";
-    response += "\"fan_on\":" + String(state.fanOn ? "true" : "false") + ",";
+    response += "\"fan_on\":" + boolToJson(state.fanOn) + ",";
     response += "\"speed\":" + String(state.fanSpeed) + ",";
     response += "\"fan_speed\":" + String(state.fanSpeed) + "}";
     sendJson(response);
@@ -332,6 +370,56 @@ void main_server_task(void *pvParameters)
     sendJson("{\"ok\":true,\"message\":\"Connecting...\"}");
   });
 
+  server.on("/camera_config", HTTP_ANY, [&]()
+  {
+    if (server.hasArg("host"))
+    {
+      const String host = server.arg("host");
+      if (ctx != NULL && ctx->configMutex != NULL && xSemaphoreTake(ctx->configMutex, portMAX_DELAY) == pdTRUE)
+      {
+        ctx->cameraHost = host;
+        xSemaphoreGive(ctx->configMutex);
+      }
+      if (ctx != NULL && ctx->stateMutex != NULL && xSemaphoreTake(ctx->stateMutex, portMAX_DELAY) == pdTRUE)
+      {
+        ctx->mnistReady = false;
+        ctx->mnistDigit = -1;
+        ctx->mnistConfidence = 0.0f;
+        ctx->mnistStatus = host.isEmpty() ? "Camera host cleared." : "Camera host saved. Waiting for next frame.";
+        xSemaphoreGive(ctx->stateMutex);
+      }
+    }
+
+    String host;
+    String status = "Camera host not configured.";
+    bool ready = false;
+    int digit = -1;
+    float confidence = 0.0f;
+
+    if (ctx != NULL && ctx->configMutex != NULL && xSemaphoreTake(ctx->configMutex, portMAX_DELAY) == pdTRUE)
+    {
+      host = ctx->cameraHost;
+      xSemaphoreGive(ctx->configMutex);
+    }
+    if (ctx != NULL && ctx->stateMutex != NULL && xSemaphoreTake(ctx->stateMutex, portMAX_DELAY) == pdTRUE)
+    {
+      status = ctx->mnistStatus;
+      ready = ctx->mnistReady;
+      digit = ctx->mnistDigit;
+      confidence = ctx->mnistConfidence;
+      xSemaphoreGive(ctx->stateMutex);
+    }
+
+    String json = "{";
+    json += "\"ok\":true,";
+    json += "\"camera_host\":\"" + host + "\",";
+    json += "\"mnist_ready\":" + boolToJson(ready) + ",";
+    json += "\"mnist_digit\":" + String(digit) + ",";
+    json += "\"mnist_confidence\":" + String(confidence, 4) + ",";
+    json += "\"mnist_status\":\"" + status + "\"}";
+    sendJson(json);
+  });
+
   server.on("/wifi_status", HTTP_GET, [&]()
   {
     String wifiSsid;
@@ -348,9 +436,9 @@ void main_server_task(void *pvParameters)
     }
 
     String json = "{";
-    json += "\"apMode\":" + String(state.isAPMode ? "true" : "false") + ",";
-    json += "\"connecting\":" + String(state.connecting ? "true" : "false") + ",";
-    json += "\"connected\":" + String(wifiConnected ? "true" : "false") + ",";
+    json += "\"apMode\":" + boolToJson(state.isAPMode) + ",";
+    json += "\"connecting\":" + boolToJson(state.connecting) + ",";
+    json += "\"connected\":" + boolToJson(wifiConnected) + ",";
     json += "\"ssid\":\"" + wifiSsid + "\",";
     json += "\"ap_ip\":\"" + WiFi.softAPIP().toString() + "\",";
     json += "\"sta_ip\":\"" + (WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "") + "\",";

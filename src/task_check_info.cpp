@@ -31,6 +31,7 @@ void Load_info_File(AppContext *ctx)
     ctx->coreIotToken = doc["CORE_IOT_TOKEN"] | "";
     ctx->coreIotServer = doc["CORE_IOT_SERVER"] | "";
     ctx->coreIotPort = doc["CORE_IOT_PORT"] | "";
+    ctx->cameraHost = doc["CAMERA_HOST"] | "";
     xSemaphoreGive(ctx->configMutex);
   }
 
@@ -46,7 +47,7 @@ void Delete_info_File()
   ESP.restart();
 }
 
-void Save_info_File(String wifiSsid, String wifiPass, String coreIotToken, String coreIotServer, String coreIotPort)
+void Save_info_File(String wifiSsid, String wifiPass, String coreIotToken, String coreIotServer, String coreIotPort, String cameraHost)
 {
   DynamicJsonDocument doc(4096);
   doc["WIFI_SSID"] = wifiSsid;
@@ -54,6 +55,7 @@ void Save_info_File(String wifiSsid, String wifiPass, String coreIotToken, Strin
   doc["CORE_IOT_TOKEN"] = coreIotToken;
   doc["CORE_IOT_SERVER"] = coreIotServer;
   doc["CORE_IOT_PORT"] = coreIotPort;
+  doc["CAMERA_HOST"] = cameraHost;
 
   File configFile = LittleFS.open("/info.dat", "w");
   if (configFile)
