@@ -1,26 +1,39 @@
 #include "task_check_info.h"
 
-void Load_info_File()
+void Load_info_File(AppContext *ctx)
 {
+  if (!LittleFS.exists("/info.dat"))
+  {
+    Serial.println("[INFO] /info.dat not found, using default config");
+    return;
+  }
+
   File file = LittleFS.open("/info.dat", "r");
   if (!file)
   {
     return;
   }
+
   DynamicJsonDocument doc(4096);
   DeserializationError error = deserializeJson(doc, file);
   if (error)
   {
     Serial.print(F("deserializeJson() failed: "));
+    Serial.println(error.c_str());
+    file.close();
+    return;
   }
-  else
+
+  if (ctx != NULL && ctx->configMutex != NULL && xSemaphoreTake(ctx->configMutex, portMAX_DELAY) == pdTRUE)
   {
-    WIFI_SSID = strdup(doc["WIFI_SSID"]);
-    WIFI_PASS = strdup(doc["WIFI_PASS"]);
-    CORE_IOT_TOKEN = strdup(doc["CORE_IOT_TOKEN"]);
-    CORE_IOT_SERVER = strdup(doc["CORE_IOT_SERVER"]);
-    CORE_IOT_PORT = strdup(doc["CORE_IOT_PORT"]);
+    ctx->wifiSsid = doc["WIFI_SSID"] | "";
+    ctx->wifiPass = doc["WIFI_PASS"] | "";
+    ctx->coreIotToken = doc["CORE_IOT_TOKEN"] | "";
+    ctx->coreIotServer = doc["CORE_IOT_SERVER"] | "";
+    ctx->coreIotPort = doc["CORE_IOT_PORT"] | "";
+    xSemaphoreGive(ctx->configMutex);
   }
+
   file.close();
 }
 
@@ -33,17 +46,14 @@ void Delete_info_File()
   ESP.restart();
 }
 
-void Save_info_File(String wifi_ssid, String wifi_pass, String CORE_IOT_TOKEN, String CORE_IOT_SERVER, String CORE_IOT_PORT)
+void Save_info_File(String wifiSsid, String wifiPass, String coreIotToken, String coreIotServer, String coreIotPort)
 {
-  Serial.println(wifi_ssid);
-  Serial.println(wifi_pass);
-
   DynamicJsonDocument doc(4096);
-  doc["WIFI_SSID"] = wifi_ssid;
-  doc["WIFI_PASS"] = wifi_pass;
-  doc["CORE_IOT_TOKEN"] = CORE_IOT_TOKEN;
-  doc["CORE_IOT_SERVER"] = CORE_IOT_SERVER;
-  doc["CORE_IOT_PORT"] = CORE_IOT_PORT;
+  doc["WIFI_SSID"] = wifiSsid;
+  doc["WIFI_PASS"] = wifiPass;
+  doc["CORE_IOT_TOKEN"] = coreIotToken;
+  doc["CORE_IOT_SERVER"] = coreIotServer;
+  doc["CORE_IOT_PORT"] = coreIotPort;
 
   File configFile = LittleFS.open("/info.dat", "w");
   if (configFile)
@@ -53,30 +63,31 @@ void Save_info_File(String wifi_ssid, String wifi_pass, String CORE_IOT_TOKEN, S
   }
   else
   {
-    Serial.println('Unable to save the configuration.');
+    Serial.println("Unable to save the configuration.");
   }
-  ESP.restart();
-};
 
-bool check_info_File(bool check)
+  ESP.restart();
+}
+
+bool check_info_File(AppContext *ctx, bool check)
 {
   if (!check)
   {
     if (!LittleFS.begin(true))
     {
-      Serial.println("❌ Lỗi khởi động LittleFS!");
+      Serial.println("LittleFS init failed");
       return false;
     }
-    Load_info_File();
+
+    Load_info_File(ctx);
   }
-  
-  if (WIFI_SSID.isEmpty() && WIFI_PASS.isEmpty())
+
+  bool missingWifi = true;
+  if (ctx != NULL && ctx->configMutex != NULL && xSemaphoreTake(ctx->configMutex, portMAX_DELAY) == pdTRUE)
   {
-    if (!check)
-    {
-      startAP();
-    }
-    return false;
+    missingWifi = ctx->wifiSsid.isEmpty() && ctx->wifiPass.isEmpty();
+    xSemaphoreGive(ctx->configMutex);
   }
-  return true;
+
+  return !missingWifi;
 }

@@ -3,140 +3,94 @@
 
 constexpr uint32_t MAX_MESSAGE_SIZE = 1024U;
 
-WiFiClient wifiClient;
-Arduino_MQTT_Client mqttClient(wifiClient);
-ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE);
-
-constexpr char LED_STATE_ATTR[] = "ledState";
-
-volatile int ledMode = 0;
-volatile bool ledState = false;
-
-constexpr uint16_t BLINKING_INTERVAL_MS_MIN = 10U;
-constexpr uint16_t BLINKING_INTERVAL_MS_MAX = 60000U;
-volatile uint16_t blinkingInterval = 1000U;
-
-constexpr std::array<const char *, 1U> SHARED_ATTRIBUTES_LIST = {
-    LED_STATE_ATTR,
-};
-
-void processSharedAttributes(const Shared_Attribute_Data &data)
+static const char *tinyMLStateToString(TinyMLState state)
 {
-    for (auto it = data.begin(); it != data.end(); ++it)
+    switch (state)
     {
-        if (strcmp(it->key().c_str(), LED_STATE_ATTR) == 0)
-        {
-            ledState = it->value().as<bool>();
-            Serial.print("LED state is set to: ");
-            Serial.println(ledState);
-        }
+    case TINYML_NORMAL:
+        return "NORMAL";
+    case TINYML_WARNING:
+        return "WARNING";
+    case TINYML_ANOMALY:
+        return "ANOMALY";
+    case TINYML_IDLE:
+    default:
+        return "IDLE";
     }
 }
-
-RPC_Response setLedSwitchValue(const RPC_Data &data)
-{
-    Serial.println("Received Switch state");
-    bool newState = data;
-    ledState = newState;
-    Serial.print("Switch state change: ");
-    Serial.println(newState);
-    return RPC_Response("setLedSwitchValue", newState);
-}
-
-const std::array<RPC_Callback, 1U> callbacks = {
-    RPC_Callback{"setLedSwitchValue", setLedSwitchValue}
-};
-
-const Shared_Attribute_Callback attributes_callback(
-    &processSharedAttributes,
-    SHARED_ATTRIBUTES_LIST.cbegin(),
-    SHARED_ATTRIBUTES_LIST.cend()
-);
-
-const Attribute_Request_Callback attribute_shared_request_callback(
-    &processSharedAttributes,
-    SHARED_ATTRIBUTES_LIST.cbegin(),
-    SHARED_ATTRIBUTES_LIST.cend()
-);
 
 bool CORE_IOT_reconnect()
 {
-    if (WiFi.status() != WL_CONNECTED)
-    {
-        return false;
-    }
+    return false;
+}
 
-    if (tb.connected())
-    {
-        return true;
-    }
-
-    Serial.println("[COREIOT] Connecting...");
-    Serial.print("[COREIOT] Server: ");
-    Serial.println(CORE_IOT_SERVER);
-    Serial.print("[COREIOT] Port: ");
-    Serial.println(CORE_IOT_PORT);
-    Serial.print("[COREIOT] Token: ");
-    Serial.println(CORE_IOT_TOKEN);
-
-    if (!tb.connect(CORE_IOT_SERVER.c_str(), CORE_IOT_TOKEN.c_str(), CORE_IOT_PORT.toInt()))
-    {
-        Serial.println("[COREIOT] Connect failed");
-        return false;
-    }
-
-    tb.sendAttributeData("macAddress", WiFi.macAddress().c_str());
-    tb.sendAttributeData("localIp", WiFi.localIP().toString().c_str());
-    tb.sendAttributeData("ssid", WiFi.SSID().c_str());
-
-    if (!tb.RPC_Subscribe(callbacks.cbegin(), callbacks.cend()))
-    {
-        Serial.println("[COREIOT] RPC subscribe failed");
-    }
-
-    if (!tb.Shared_Attributes_Subscribe(attributes_callback))
-    {
-        Serial.println("[COREIOT] Shared attribute subscribe failed");
-    }
-
-    if (!tb.Shared_Attributes_Request(attribute_shared_request_callback))
-    {
-        Serial.println("[COREIOT] Shared attribute request failed");
-    }
-
-    Serial.println("[COREIOT] Connected");
-    return true;
+void CORE_IOT_sendata(String mode, String feed, String data)
+{
+    (void)mode;
+    (void)feed;
+    (void)data;
 }
 
 void coreiot_thingsboard_task(void *pvParameters)
 {
+    AppContext *ctx = static_cast<AppContext *>(pvParameters);
+    WiFiClient wifiClient;
+    Arduino_MQTT_Client mqttClient(wifiClient);
+    ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE);
+
     while (1)
     {
-        if (xBinarySemaphoreInternet != NULL)
+        if (ctx != NULL && ctx->internetSemaphore != NULL && WiFi.status() == WL_CONNECTED)
         {
-            if (WiFi.status() == WL_CONNECTED)
+            String server;
+            String token;
+            String port;
+            float temperature = 0.0f;
+            float humidity = 0.0f;
+            float tinymlScore = 0.0f;
+            TinyMLState tinymlState = TINYML_IDLE;
+
+            if (ctx->configMutex != NULL && xSemaphoreTake(ctx->configMutex, portMAX_DELAY) == pdTRUE)
             {
-                CORE_IOT_reconnect();
-
-                if (tb.connected())
-                {
-                    tb.loop();
-
-                    tb.sendTelemetryData("temperature", glob_temperature);
-                    tb.sendTelemetryData("humidity", glob_humidity);
-
-                    tb.sendAttributeData("rssi", WiFi.RSSI());
-                    tb.sendAttributeData("channel", WiFi.channel());
-                    tb.sendAttributeData("bssid", WiFi.BSSIDstr().c_str());
-                    tb.sendAttributeData("localIp", WiFi.localIP().toString().c_str());
-                    tb.sendAttributeData("ssid", WiFi.SSID().c_str());
-
-                    Serial.print("[COREIOT] temperature = ");
-                    Serial.print(glob_temperature);
-                    Serial.print(" | humidity = ");
-                    Serial.println(glob_humidity);
-                }
+                server = ctx->coreIotServer;
+                token = ctx->coreIotToken;
+                port = ctx->coreIotPort;
+                xSemaphoreGive(ctx->configMutex);
             }
+
+            if (ctx->stateMutex != NULL && xSemaphoreTake(ctx->stateMutex, portMAX_DELAY) == pdTRUE)
+            {
+                temperature = ctx->temperature;
+                humidity = ctx->humidity;
+                tinymlScore = ctx->tinymlScore;
+                tinymlState = ctx->tinymlState;
+                xSemaphoreGive(ctx->stateMutex);
+            }
+
+            if (!tb.connected())
+            {
+                if (!tb.connect(server.c_str(), token.c_str(), port.toInt()))
+                {
+                    Serial.println("[COREIOT] Connect failed");
+                    vTaskDelay(pdMS_TO_TICKS(10000));
+                    continue;
+                }
+
+                tb.sendAttributeData("macAddress", WiFi.macAddress().c_str());
+                tb.sendAttributeData("localIp", WiFi.localIP().toString().c_str());
+                tb.sendAttributeData("ssid", WiFi.SSID().c_str());
+            }
+
+            tb.loop();
+            tb.sendTelemetryData("temperature", temperature);
+            tb.sendTelemetryData("humidity", humidity);
+            tb.sendTelemetryData("tinyml_score", tinymlScore);
+            tb.sendAttributeData("tinyml_state", tinyMLStateToString(tinymlState));
+            tb.sendAttributeData("rssi", WiFi.RSSI());
+            tb.sendAttributeData("channel", WiFi.channel());
+            tb.sendAttributeData("bssid", WiFi.BSSIDstr().c_str());
+            tb.sendAttributeData("localIp", WiFi.localIP().toString().c_str());
+            tb.sendAttributeData("ssid", WiFi.SSID().c_str());
         }
 
         vTaskDelay(pdMS_TO_TICKS(10000));

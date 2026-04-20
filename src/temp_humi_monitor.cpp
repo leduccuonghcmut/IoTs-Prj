@@ -1,8 +1,6 @@
 #include "temp_humi_monitor.h"
 #include "global.h"
 
-DHT20 dht20;
-
 static LCDState classifyState(float t, float h)
 {
   if (t >= 35.0f || h < 25.0f || h > 85.0f)
@@ -25,6 +23,8 @@ static HumiLevel classifyHumidity(float h)
 
 void temp_humi_monitor(void *pvParameters)
 {
+  AppContext *ctx = static_cast<AppContext *>(pvParameters);
+  DHT20 dht20;
   Wire.begin(11, 12);
   dht20.begin();
 
@@ -45,16 +45,20 @@ void temp_humi_monitor(void *pvParameters)
       continue;
     }
 
-    glob_temperature = temperature;
-    glob_humidity = humidity;
+    if (ctx != NULL && ctx->stateMutex != NULL && xSemaphoreTake(ctx->stateMutex, portMAX_DELAY) == pdTRUE)
+    {
+      ctx->temperature = temperature;
+      ctx->humidity = humidity;
+      xSemaphoreGive(ctx->stateMutex);
+    }
 
     SensorData data;
     data.temperature = temperature;
     data.humidity = humidity;
 
-    if (xSensorQueue != NULL)
+    if (ctx != NULL && ctx->sensorQueue != NULL)
     {
-      xQueueOverwrite(xSensorQueue, &data);
+      xQueueOverwrite(ctx->sensorQueue, &data);
     }
 
     LCDState newLCDState = classifyState(temperature, humidity);
@@ -63,11 +67,15 @@ void temp_humi_monitor(void *pvParameters)
     // cập nhật NeoPixel ngay cả lần đầu
     if (newHumiLevel != lastHumiLevel)
     {
-      g_humiLevel = newHumiLevel;
-
-      if (xNeoHumiSemaphore != NULL)
+      if (ctx != NULL && ctx->stateMutex != NULL && xSemaphoreTake(ctx->stateMutex, portMAX_DELAY) == pdTRUE)
       {
-        xSemaphoreGive(xNeoHumiSemaphore);
+        ctx->humiLevel = newHumiLevel;
+        xSemaphoreGive(ctx->stateMutex);
+      }
+
+      if (ctx != NULL && ctx->neoHumiSemaphore != NULL)
+      {
+        xSemaphoreGive(ctx->neoHumiSemaphore);
       }
 
       lastHumiLevel = newHumiLevel;
@@ -79,16 +87,22 @@ void temp_humi_monitor(void *pvParameters)
       switch (newLCDState)
       {
         case LCD_NORMAL:
-          if (xSemLCDNormal != NULL) xSemaphoreGive(xSemLCDNormal);
+          if (ctx != NULL && ctx->semLCDNormal != NULL) xSemaphoreGive(ctx->semLCDNormal);
           break;
 
         case LCD_WARNING:
-          if (xSemLCDWarning != NULL) xSemaphoreGive(xSemLCDWarning);
+          if (ctx != NULL && ctx->semLCDWarning != NULL) xSemaphoreGive(ctx->semLCDWarning);
           break;
 
         case LCD_CRITICAL:
-          if (xSemLCDCritical != NULL) xSemaphoreGive(xSemLCDCritical);
+          if (ctx != NULL && ctx->semLCDCritical != NULL) xSemaphoreGive(ctx->semLCDCritical);
           break;
+      }
+
+      if (ctx != NULL && ctx->stateMutex != NULL && xSemaphoreTake(ctx->stateMutex, portMAX_DELAY) == pdTRUE)
+      {
+        ctx->lcdState = newLCDState;
+        xSemaphoreGive(ctx->stateMutex);
       }
 
       lastLCDState = newLCDState;

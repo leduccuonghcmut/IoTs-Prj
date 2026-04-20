@@ -78,6 +78,50 @@ function applyFanState(data) {
   if (slider) slider.value = speed;
 }
 
+function applyTinyMLState(data) {
+  const ready = data.tinyml_ready === true || String(data.tinyml_ready).toLowerCase() === "true";
+  const scoreValue = Number(data.tinyml_score);
+  const score = Number.isFinite(scoreValue) ? scoreValue : 0;
+  const state = String(data.tinyml_state || (ready ? "NORMAL" : "IDLE")).toUpperCase();
+  const desc =
+    data.tinyml_desc ||
+    (ready ? "TinyML da phan tich du lieu cam bien." : "TinyML dang cho du lieu cam bien.");
+
+  const badge = document.getElementById("tinymlBadge");
+  if (badge) {
+    badge.textContent = state;
+    badge.classList.remove("on", "off", "tinyml-normal", "tinyml-warning", "tinyml-anomaly", "tinyml-idle");
+
+    if (!ready || state === "IDLE") {
+      badge.classList.add("off", "tinyml-idle");
+    } else if (state === "ANOMALY") {
+      badge.classList.add("tinyml-anomaly");
+    } else if (state === "WARNING") {
+      badge.classList.add("tinyml-warning");
+    } else {
+      badge.classList.add("tinyml-normal");
+    }
+  }
+
+  setText("tinymlScore", ready ? score.toFixed(4) : "--");
+  setText("tinymlDesc", desc);
+
+  const meter = document.getElementById("tinymlMeterFill");
+  if (meter) {
+    const normalized = Math.max(0, Math.min(100, score * 100));
+    meter.style.width = `${ready ? normalized : 0}%`;
+    meter.classList.remove("tinyml-normal", "tinyml-warning", "tinyml-anomaly");
+
+    if (state === "ANOMALY") {
+      meter.classList.add("tinyml-anomaly");
+    } else if (state === "WARNING") {
+      meter.classList.add("tinyml-warning");
+    } else {
+      meter.classList.add("tinyml-normal");
+    }
+  }
+}
+
 async function loadSensors() {
   try {
     const response = await fetch(`/sensors?t=${Date.now()}`, {
@@ -118,6 +162,8 @@ async function loadSensors() {
     ) {
       applyFanState(data);
     }
+
+    applyTinyMLState(data);
   } catch (error) {
     console.error("Không lấy được dữ liệu cảm biến:", error);
     setText("temp", "--");
@@ -157,6 +203,7 @@ async function loadDeviceState() {
 
     applyDoorState(data.door);
     applyFanState(data);
+    applyTinyMLState(data);
   } catch (err) {
     console.error("Không lấy được trạng thái thiết bị:", err);
   }

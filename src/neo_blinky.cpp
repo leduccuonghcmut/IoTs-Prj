@@ -3,6 +3,7 @@
 
 void neo_blinky(void *pvParameters)
 {
+    AppContext *ctx = static_cast<AppContext *>(pvParameters);
     Adafruit_NeoPixel strip(LED_COUNT, NEO_PIN, NEO_GRB + NEO_KHZ800);
 
     strip.begin();
@@ -14,11 +15,18 @@ void neo_blinky(void *pvParameters)
 
     while (1)
     {
-        if (xNeoHumiSemaphore != NULL)
+        if (ctx != NULL && ctx->neoHumiSemaphore != NULL)
         {
-            if (xSemaphoreTake(xNeoHumiSemaphore, 0) == pdTRUE)
+            if (xSemaphoreTake(ctx->neoHumiSemaphore, 0) == pdTRUE)
             {
-                switch (g_humiLevel)
+                HumiLevel currentLevel = HUMI_NORMAL;
+                if (ctx->stateMutex != NULL && xSemaphoreTake(ctx->stateMutex, portMAX_DELAY) == pdTRUE)
+                {
+                    currentLevel = ctx->humiLevel;
+                    xSemaphoreGive(ctx->stateMutex);
+                }
+
+                switch (currentLevel)
                 {
                     case HUMI_DRY:
                         r = 255; g = 0; b = 0;

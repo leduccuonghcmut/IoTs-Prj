@@ -20,6 +20,7 @@
 
 void led_blinky(void *pvParameters)
 {
+  AppContext *ctx = static_cast<AppContext *>(pvParameters);
   pinMode(LED_GPIO, OUTPUT);
 
   uint32_t onTime = 1000;
@@ -27,9 +28,16 @@ void led_blinky(void *pvParameters)
 
   while (1)
   {
-    if (xSemaphoreTake(xLedTempSemaphore, 0) == pdTRUE)
+    if (ctx != NULL && ctx->ledTempSemaphore != NULL && xSemaphoreTake(ctx->ledTempSemaphore, 0) == pdTRUE)
     {
-      switch (g_tempLevel)
+      TempLevel currentLevel = TEMP_NORMAL;
+      if (ctx->stateMutex != NULL && xSemaphoreTake(ctx->stateMutex, portMAX_DELAY) == pdTRUE)
+      {
+        currentLevel = ctx->tempLevel;
+        xSemaphoreGive(ctx->stateMutex);
+      }
+
+      switch (currentLevel)
       {
         case TEMP_NORMAL:
           onTime = 1000;
