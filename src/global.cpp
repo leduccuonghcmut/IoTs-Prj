@@ -26,9 +26,9 @@ LCDState g_lcdState = LCD_NORMAL;
 // =========================
 String WIFI_SSID = "";
 String WIFI_PASS = "";
-String CORE_IOT_TOKEN = "";
-String CORE_IOT_SERVER = "";
-String CORE_IOT_PORT = "";
+String CORE_IOT_TOKEN = "y8m225l6zv297aarday2";
+String CORE_IOT_SERVER = "app.coreiot.io";
+String CORE_IOT_PORT = "1883U";
 
 // AP mặc định của ESP32
 String ssid = "ESP32-YOUR NETWORK HERE!!!";

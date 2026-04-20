@@ -1,5 +1,5 @@
-
 #include "task_core_iot.h"
+#include "global.h"
 
 constexpr uint32_t MAX_MESSAGE_SIZE = 1024U;
 
@@ -16,9 +16,7 @@ constexpr uint16_t BLINKING_INTERVAL_MS_MIN = 10U;
 constexpr uint16_t BLINKING_INTERVAL_MS_MAX = 60000U;
 volatile uint16_t blinkingInterval = 1000U;
 
-constexpr int16_t telemetrySendInterval = 10000U;
-
-constexpr std::array<const char *, 2U> SHARED_ATTRIBUTES_LIST = {
+constexpr std::array<const char *, 1U> SHARED_ATTRIBUTES_LIST = {
     LED_STATE_ATTR,
 };
 
@@ -26,24 +24,12 @@ void processSharedAttributes(const Shared_Attribute_Data &data)
 {
     for (auto it = data.begin(); it != data.end(); ++it)
     {
-        // if (strcmp(it->key().c_str(), BLINKING_INTERVAL_ATTR) == 0)
-        // {
-        //     const uint16_t new_interval = it->value().as<uint16_t>();
-        //     if (new_interval >= BLINKING_INTERVAL_MS_MIN && new_interval <= BLINKING_INTERVAL_MS_MAX)
-        //     {
-        //         blinkingInterval = new_interval;
-        //         Serial.print("Blinking interval is set to: ");
-        //         Y
-        //             Serial.println(new_interval);
-        //     }
-        // }
-        // if (strcmp(it->key().c_str(), LED_STATE_ATTR) == 0)
-        // {
-        //     ledState = it->value().as<bool>();
-        // digitalWrite(LED_PIN, ledState);
-        // Serial.print("LED state is set to: ");
-        // Serial.println(ledState);
-        // }
+        if (strcmp(it->key().c_str(), LED_STATE_ATTR) == 0)
+        {
+            ledState = it->value().as<bool>();
+            Serial.print("LED state is set to: ");
+            Serial.println(ledState);
+        }
     }
 }
 
@@ -51,70 +37,108 @@ RPC_Response setLedSwitchValue(const RPC_Data &data)
 {
     Serial.println("Received Switch state");
     bool newState = data;
+    ledState = newState;
     Serial.print("Switch state change: ");
     Serial.println(newState);
     return RPC_Response("setLedSwitchValue", newState);
 }
 
 const std::array<RPC_Callback, 1U> callbacks = {
-    RPC_Callback{"setLedSwitchValue", setLedSwitchValue}};
+    RPC_Callback{"setLedSwitchValue", setLedSwitchValue}
+};
 
-const Shared_Attribute_Callback attributes_callback(&processSharedAttributes, SHARED_ATTRIBUTES_LIST.cbegin(), SHARED_ATTRIBUTES_LIST.cend());
-const Attribute_Request_Callback attribute_shared_request_callback(&processSharedAttributes, SHARED_ATTRIBUTES_LIST.cbegin(), SHARED_ATTRIBUTES_LIST.cend());
+const Shared_Attribute_Callback attributes_callback(
+    &processSharedAttributes,
+    SHARED_ATTRIBUTES_LIST.cbegin(),
+    SHARED_ATTRIBUTES_LIST.cend()
+);
 
-void CORE_IOT_sendata(String mode, String feed, String data)
+const Attribute_Request_Callback attribute_shared_request_callback(
+    &processSharedAttributes,
+    SHARED_ATTRIBUTES_LIST.cbegin(),
+    SHARED_ATTRIBUTES_LIST.cend()
+);
+
+bool CORE_IOT_reconnect()
 {
-    if (mode == "attribute")
+    if (WiFi.status() != WL_CONNECTED)
     {
-        tb.sendAttributeData(feed.c_str(), data);
+        return false;
     }
-    else if (mode == "telemetry")
+
+    if (tb.connected())
     {
-        float value = data.toFloat();
-        tb.sendTelemetryData(feed.c_str(), value);
+        return true;
     }
-    else
+
+    Serial.println("[COREIOT] Connecting...");
+    Serial.print("[COREIOT] Server: ");
+    Serial.println(CORE_IOT_SERVER);
+    Serial.print("[COREIOT] Port: ");
+    Serial.println(CORE_IOT_PORT);
+    Serial.print("[COREIOT] Token: ");
+    Serial.println(CORE_IOT_TOKEN);
+
+    if (!tb.connect(CORE_IOT_SERVER.c_str(), CORE_IOT_TOKEN.c_str(), CORE_IOT_PORT.toInt()))
     {
-        // handle unknown mode
+        Serial.println("[COREIOT] Connect failed");
+        return false;
     }
+
+    tb.sendAttributeData("macAddress", WiFi.macAddress().c_str());
+    tb.sendAttributeData("localIp", WiFi.localIP().toString().c_str());
+    tb.sendAttributeData("ssid", WiFi.SSID().c_str());
+
+    if (!tb.RPC_Subscribe(callbacks.cbegin(), callbacks.cend()))
+    {
+        Serial.println("[COREIOT] RPC subscribe failed");
+    }
+
+    if (!tb.Shared_Attributes_Subscribe(attributes_callback))
+    {
+        Serial.println("[COREIOT] Shared attribute subscribe failed");
+    }
+
+    if (!tb.Shared_Attributes_Request(attribute_shared_request_callback))
+    {
+        Serial.println("[COREIOT] Shared attribute request failed");
+    }
+
+    Serial.println("[COREIOT] Connected");
+    return true;
 }
 
-void CORE_IOT_reconnect()
+void coreiot_thingsboard_task(void *pvParameters)
 {
-    if (!tb.connected())
+    while (1)
     {
-        if (!tb.connect(CORE_IOT_SERVER.c_str(), CORE_IOT_TOKEN.c_str(), CORE_IOT_PORT.toInt()))
+        if (xBinarySemaphoreInternet != NULL)
         {
-            // Serial.println("Failed to connect");
-            return;
+            if (WiFi.status() == WL_CONNECTED)
+            {
+                CORE_IOT_reconnect();
+
+                if (tb.connected())
+                {
+                    tb.loop();
+
+                    tb.sendTelemetryData("temperature", glob_temperature);
+                    tb.sendTelemetryData("humidity", glob_humidity);
+
+                    tb.sendAttributeData("rssi", WiFi.RSSI());
+                    tb.sendAttributeData("channel", WiFi.channel());
+                    tb.sendAttributeData("bssid", WiFi.BSSIDstr().c_str());
+                    tb.sendAttributeData("localIp", WiFi.localIP().toString().c_str());
+                    tb.sendAttributeData("ssid", WiFi.SSID().c_str());
+
+                    Serial.print("[COREIOT] temperature = ");
+                    Serial.print(glob_temperature);
+                    Serial.print(" | humidity = ");
+                    Serial.println(glob_humidity);
+                }
+            }
         }
 
-        tb.sendAttributeData("macAddress", WiFi.macAddress().c_str());
-
-        Serial.println("Subscribing for RPC...");
-        if (!tb.RPC_Subscribe(callbacks.cbegin(), callbacks.cend()))
-        {
-            // Serial.println("Failed to subscribe for RPC");
-            return;
-        }
-
-        if (!tb.Shared_Attributes_Subscribe(attributes_callback))
-        {
-            // Serial.println("Failed to subscribe for shared attribute updates");
-            return;
-        }
-
-        Serial.println("Subscribe done");
-
-        if (!tb.Shared_Attributes_Request(attribute_shared_request_callback))
-        {
-            // Serial.println("Failed to request for shared attributes");
-            return;
-        }
-        tb.sendAttributeData("localIp", WiFi.localIP().toString().c_str());
-    }
-    else if (tb.connected())
-    {
-        tb.loop();
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
