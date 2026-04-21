@@ -36,6 +36,16 @@ namespace
         int count;
     };
 
+    struct PreparedDigitStats
+    {
+        int width;
+        int height;
+        int foregroundCount;
+        float fillRatio;
+        float centerOffset;
+        bool valid;
+    };
+
     void setMnistStatus(AppContext *ctx, bool ready, int digit, float confidence, const String &status)
     {
         if (ctx == NULL || ctx->stateMutex == NULL)
@@ -220,8 +230,9 @@ namespace
         return box;
     }
 
-    bool prepareMnistCanvas()
+    bool prepareMnistCanvas(PreparedDigitStats &stats)
     {
+        stats = { 0, 0, 0, 0.0f, 0.0f, false };
         const float borderMean = computeBorderMean();
         const float centerMean = computeMeanRegion(24, 24, 72, 72);
         const bool darkDigitOnBrightBg = centerMean < borderMean;
@@ -247,6 +258,32 @@ namespace
 
         const int width = box.maxX - box.minX + 1;
         const int height = box.maxY - box.minY + 1;
+        const float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
+        const float fillRatio = static_cast<float>(box.count) / static_cast<float>(width * height);
+        const float centerX = (box.minX + box.maxX) * 0.5f;
+        const float centerY = (box.minY + box.maxY) * 0.5f;
+        const float frameCenter = (kCameraFrameSize - 1) * 0.5f;
+        const float centerOffsetX = fabsf(centerX - frameCenter);
+        const float centerOffsetY = fabsf(centerY - frameCenter);
+        const float centerOffset = centerOffsetX > centerOffsetY ? centerOffsetX : centerOffsetY;
+
+        stats.width = width;
+        stats.height = height;
+        stats.foregroundCount = box.count;
+        stats.fillRatio = fillRatio;
+        stats.centerOffset = centerOffset;
+
+        const bool sizeOk = width >= 10 && height >= 10 && width <= 84 && height <= 84;
+        const bool aspectOk = aspectRatio >= 0.18f && aspectRatio <= 1.85f;
+        const bool densityOk = fillRatio >= 0.03f && fillRatio <= 0.70f;
+        const bool centeredEnough = centerOffset <= 24.0f;
+        if (!(sizeOk && aspectOk && densityOk && centeredEnough))
+        {
+            for (float &value : g_inputCanvas)
+                value = 0.0f;
+            return false;
+        }
+
         const float scaleX = static_cast<float>(width) / static_cast<float>(kDigitCanvasSize);
         const float scaleY = static_cast<float>(height) / static_cast<float>(kDigitCanvasSize);
 
@@ -267,6 +304,7 @@ namespace
             }
         }
 
+        stats.valid = true;
         return true;
     }
 
@@ -321,13 +359,14 @@ namespace
         return false;
     }
 
-    bool readOutputTensor(TfLiteTensor *output, int &digit, float &confidence)
+    bool readOutputTensor(TfLiteTensor *output, int &digit, float &confidence, float &margin)
     {
         if (output == nullptr)
             return false;
 
         digit = -1;
         confidence = 0.0f;
+        float secondBest = -1000000.0f;
         for (int i = 0; i < 10; ++i)
         {
             float value = 0.0f;
@@ -342,10 +381,16 @@ namespace
 
             if (value > confidence)
             {
+                secondBest = confidence;
                 confidence = value;
                 digit = i;
             }
+            else if (value > secondBest)
+            {
+                secondBest = value;
+            }
         }
+        margin = confidence - secondBest;
         return digit >= 0;
     }
 }
@@ -408,9 +453,10 @@ void camera_mnist_task(void *pvParameters)
             continue;
         }
 
-        if (!prepareMnistCanvas())
+        PreparedDigitStats stats;
+        if (!prepareMnistCanvas(stats))
         {
-            setMnistStatus(ctx, false, -1, 0.0f, "No clear digit found in the current frame.");
+            setMnistStatus(ctx, false, -1, 0.0f, "Khung hinh chua giong mot chu so ro rang. Hay dua so vao giua khung, nen sach va net dam.");
             vTaskDelay(kCameraPollDelay);
             continue;
         }
@@ -431,11 +477,27 @@ void camera_mnist_task(void *pvParameters)
 
         int predictedDigit = -1;
         float confidence = 0.0f;
-        if (!readOutputTensor(output, predictedDigit, confidence))
+        float margin = 0.0f;
+        if (!readOutputTensor(output, predictedDigit, confidence, margin))
         {
             setMnistStatus(ctx, false, -1, 0.0f, "Unsupported MNIST output tensor type.");
             vTaskDelete(NULL);
             return;
+        }
+
+        const bool confidenceOk = confidence >= 0.92f;
+        const bool marginOk = margin >= 0.12f;
+        if (!(confidenceOk && marginOk))
+        {
+            String rejectStatus = "Model chua du chac chan";
+            rejectStatus += " (conf=";
+            rejectStatus += String(confidence, 3);
+            rejectStatus += ", margin=";
+            rejectStatus += String(margin, 3);
+            rejectStatus += "). Thu dung nen tron, chi mot chu so va can giua khung.";
+            setMnistStatus(ctx, false, -1, confidence, rejectStatus);
+            vTaskDelay(kCameraPollDelay);
+            continue;
         }
 
         String status = "Digit ";
