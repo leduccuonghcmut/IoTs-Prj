@@ -12,12 +12,22 @@
 #define RGB_LED_COUNT 1
 #endif
 
+#ifndef RGB_BRIGHTNESS
+#define RGB_BRIGHTNESS 80
+#endif
+
 namespace
 {
 Adafruit_NeoPixel &rgbStrip()
 {
     static Adafruit_NeoPixel strip(RGB_LED_COUNT, RGB_PIN, NEO_GRB + NEO_KHZ800);
     return strip;
+}
+
+bool &rgbReadyFlag()
+{
+    static bool ready = false;
+    return ready;
 }
 
 void updateRgbState(AppContext *ctx, uint8_t red, uint8_t green, uint8_t blue)
@@ -36,10 +46,25 @@ void updateRgbState(AppContext *ctx, uint8_t red, uint8_t green, uint8_t blue)
 
     xSemaphoreGive(ctx->stateMutex);
 }
+
+void logExternalRgb(AppContext *ctx, uint8_t red, uint8_t green, uint8_t blue)
+{
+    if (ctx != NULL && ctx->serialMutex != NULL && xSemaphoreTake(ctx->serialMutex, pdMS_TO_TICKS(100)) == pdTRUE)
+    {
+        Serial.printf("[EXT-RGB] pin=%d color=(%u,%u,%u)\n", RGB_PIN, red, green, blue);
+        xSemaphoreGive(ctx->serialMutex);
+        return;
+    }
+
+    Serial.printf("[EXT-RGB] pin=%d color=(%u,%u,%u)\n", RGB_PIN, red, green, blue);
+}
 }
 
 void setNeoPixelColor(uint8_t r, uint8_t g, uint8_t b)
 {
+    if (!rgbReadyFlag())
+        return;
+
     Adafruit_NeoPixel &strip = rgbStrip();
 
     for (int index = 0; index < RGB_LED_COUNT; ++index)
@@ -55,9 +80,10 @@ void NeoPixel(void *pvParameters)
     Adafruit_NeoPixel &strip = rgbStrip();
 
     strip.begin();
-    strip.setBrightness(80);
+    strip.setBrightness(RGB_BRIGHTNESS);
     strip.clear();
     strip.show();
+    rgbReadyFlag() = true;
 
     updateRgbState(ctx, 0, 0, 0);
 
@@ -79,6 +105,7 @@ void NeoPixel(void *pvParameters)
 
             setNeoPixelColor(red, green, blue);
             updateRgbState(ctx, red, green, blue);
+            logExternalRgb(ctx, red, green, blue);
         }
     }
 }

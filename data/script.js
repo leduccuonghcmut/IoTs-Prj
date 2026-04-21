@@ -2,6 +2,10 @@ const POLL_SENSORS_MS = 2000;
 const POLL_STATE_MS = 3000;
 const POLL_WIFI_MS = 3000;
 const POLL_CAMERA_MS = 4000;
+let rgbPickerDirty = false;
+let rgbPickerDraftHex = "#000000";
+let remoteRgbPickerDirty = false;
+let remoteRgbPickerDraftHex = "#000000";
 
 function getCameraHost() {
   return document.getElementById("pcIpInput")?.value?.trim() || localStorage.getItem("pc_ip") || "";
@@ -10,6 +14,19 @@ function getCameraHost() {
 function getCameraBaseUrl() {
   const host = getCameraHost();
   return host ? `http://${host}` : "";
+}
+
+async function parseJsonSafe(response) {
+  const text = await response.text();
+  if (!text) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    return { raw: text };
+  }
 }
 
 function setText(id, value) {
@@ -113,18 +130,22 @@ function applyRgbState(data) {
 
   setBooleanBadge("rgbState", rgbOn);
   setBooleanBadge("rgbOverviewBadge", rgbOn);
-  setText("rgbHexValue", rgbHex);
 
   const picker = document.getElementById("rgbPicker");
-  if (picker && /^#[0-9A-F]{6}$/i.test(rgbHex)) {
+  const shouldSyncPicker = !rgbPickerDirty && picker && /^#[0-9A-F]{6}$/i.test(rgbHex);
+  if (shouldSyncPicker) {
     picker.value = rgbHex;
+    rgbPickerDraftHex = rgbHex;
   }
 
   const preview = document.getElementById("rgbPreview");
   if (preview) {
-    preview.style.background = rgbHex;
-    preview.style.boxShadow = rgbOn ? `0 0 24px ${rgbHex}66` : "inset 0 1px 0 rgba(255,255,255,0.1)";
+    const previewHex = rgbPickerDirty ? rgbPickerDraftHex : rgbHex;
+    preview.style.background = previewHex;
+    preview.style.boxShadow = rgbOn && !rgbPickerDirty ? `0 0 24px ${rgbHex}66` : `0 0 24px ${previewHex}66`;
   }
+
+  setText("rgbHexValue", rgbPickerDirty ? rgbPickerDraftHex : rgbHex);
 }
 
 function applyRemoteState(data) {
@@ -148,7 +169,7 @@ function applyRemoteState(data) {
   setText("remoteHumiValue", Number.isFinite(Number(data.remote_hum)) ? `${Number(data.remote_hum).toFixed(1)}%` : "--");
   setText("remoteLastSeen", remoteOnline ? formatLastSeen(data.remote_last_seen_ms) : "offline");
   setText("remoteFanSpeedValue", `${remoteFanSpeed}%`);
-  setText("remoteRgbHexValue", remoteRgbHex);
+  setText("remoteRgbHexValue", remoteRgbPickerDirty ? remoteRgbPickerDraftHex : remoteRgbHex);
 
   const peerInput = document.getElementById("peerMacInput");
   if (peerInput && data.peer_mac) {
@@ -161,14 +182,16 @@ function applyRemoteState(data) {
   }
 
   const remoteRgbPicker = document.getElementById("remoteRgbPicker");
-  if (remoteRgbPicker && /^#[0-9A-F]{6}$/i.test(remoteRgbHex)) {
+  if (!remoteRgbPickerDirty && remoteRgbPicker && /^#[0-9A-F]{6}$/i.test(remoteRgbHex)) {
     remoteRgbPicker.value = remoteRgbHex;
+    remoteRgbPickerDraftHex = remoteRgbHex;
   }
 
   const remotePreview = document.getElementById("remoteRgbPreview");
   if (remotePreview) {
-    remotePreview.style.background = remoteRgbHex;
-    remotePreview.style.boxShadow = remoteRgbOn ? `0 0 24px ${remoteRgbHex}66` : "inset 0 1px 0 rgba(255,255,255,0.1)";
+    const previewHex = remoteRgbPickerDirty ? remoteRgbPickerDraftHex : remoteRgbHex;
+    remotePreview.style.background = previewHex;
+    remotePreview.style.boxShadow = remoteRgbOn && !remoteRgbPickerDirty ? `0 0 24px ${remoteRgbHex}66` : `0 0 24px ${previewHex}66`;
   }
 }
 
@@ -302,6 +325,8 @@ async function applyRgbColor() {
 
   try {
     await fetchJson(`/rgb?hex=${encodeURIComponent(hexColor)}`);
+    rgbPickerDirty = false;
+    rgbPickerDraftHex = hexColor.toUpperCase();
     await loadDeviceState();
   } catch (error) {
     console.error("RGB control error:", error);
@@ -312,6 +337,8 @@ async function applyRgbColor() {
 async function turnOffRgb() {
   try {
     await fetchJson("/rgb?hex=000000");
+    rgbPickerDirty = false;
+    rgbPickerDraftHex = "#000000";
     await loadDeviceState();
   } catch (error) {
     console.error("RGB off error:", error);
@@ -321,8 +348,9 @@ async function turnOffRgb() {
 
 async function controlRemoteDoor(state) {
   try {
-    await fetchJson(`/remote/door?state=${state}`);
-    setTimeout(loadDeviceState, 400);
+    const data = await fetchJson(`/remote/door?state=${state}`);
+    applyRemoteState(data);
+    setTimeout(loadDeviceState, 1200);
   } catch (error) {
     console.error("Remote door error:", error);
     alert("Khong gui duoc lenh cua toi board giao tiep");
@@ -331,8 +359,9 @@ async function controlRemoteDoor(state) {
 
 async function setRemoteFan(state) {
   try {
-    await fetchJson(`/remote/fan?state=${state}`);
-    setTimeout(loadDeviceState, 400);
+    const data = await fetchJson(`/remote/fan?state=${state}`);
+    applyRemoteState(data);
+    setTimeout(loadDeviceState, 1200);
   } catch (error) {
     console.error("Remote fan error:", error);
     alert("Khong gui duoc lenh quat toi board giao tiep");
@@ -341,8 +370,9 @@ async function setRemoteFan(state) {
 
 async function setRemoteFanSpeed(value) {
   try {
-    await fetchJson(`/remote/fan?speed=${value}`);
-    setTimeout(loadDeviceState, 400);
+    const data = await fetchJson(`/remote/fan?speed=${value}`);
+    applyRemoteState(data);
+    setTimeout(loadDeviceState, 1200);
   } catch (error) {
     console.error("Remote fan speed error:", error);
     alert("Khong chinh duoc toc do quat remote");
@@ -354,8 +384,11 @@ async function applyRemoteRgbColor() {
   const hexColor = picker?.value?.trim() || "#000000";
 
   try {
-    await fetchJson(`/remote/rgb?hex=${encodeURIComponent(hexColor)}`);
-    setTimeout(loadDeviceState, 400);
+    const data = await fetchJson(`/remote/rgb?hex=${encodeURIComponent(hexColor)}`);
+    remoteRgbPickerDirty = false;
+    remoteRgbPickerDraftHex = hexColor.toUpperCase();
+    applyRemoteState(data);
+    setTimeout(loadDeviceState, 1200);
   } catch (error) {
     console.error("Remote RGB control error:", error);
     alert("Khong gui duoc mau RGB toi board giao tiep");
@@ -364,8 +397,11 @@ async function applyRemoteRgbColor() {
 
 async function turnOffRemoteRgb() {
   try {
-    await fetchJson("/remote/rgb?hex=000000");
-    setTimeout(loadDeviceState, 400);
+    const data = await fetchJson("/remote/rgb?hex=000000");
+    remoteRgbPickerDirty = false;
+    remoteRgbPickerDraftHex = "#000000";
+    applyRemoteState(data);
+    setTimeout(loadDeviceState, 1200);
   } catch (error) {
     console.error("Remote RGB off error:", error);
     alert("Khong tat duoc RGB cua board giao tiep");
@@ -592,6 +628,13 @@ async function setCameraSource(sourceName) {
   return response.json();
 }
 
+async function refreshCapturedPreview() {
+  const image = document.getElementById("cameraView");
+  if (image) {
+    image.src = `${getCameraBaseUrl()}/current_frame?t=${Date.now()}`;
+  }
+}
+
 async function useCameraSource() {
   try {
     const saved = await savePcIp();
@@ -638,19 +681,48 @@ async function uploadTestImage() {
       cache: "no-store"
     });
 
+    const payload = await parseJsonSafe(response);
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      throw new Error(payload.error || `HTTP ${response.status}`);
     }
 
-    const image = document.getElementById("cameraView");
-    if (image) {
-      image.src = `${baseUrl}/current_frame?t=${Date.now()}`;
-    }
+    await refreshCapturedPreview();
 
     setText("camStatus", `Da tai anh test: ${file.name}`);
   } catch (error) {
     console.error("Khong tai duoc anh test:", error);
-    alert("Khong tai duoc anh test len camera server");
+    alert(`Khong tai duoc anh test len camera server\n${error.message || ""}`.trim());
+  }
+}
+
+async function captureCurrentFrame() {
+  const baseUrl = getCameraBaseUrl();
+  if (!baseUrl) {
+    alert("Chua co IP PC");
+    return;
+  }
+
+  try {
+    const saved = await savePcIp();
+    if (!saved) {
+      return;
+    }
+
+    const response = await fetch(`${baseUrl}/capture_frame`, {
+      method: "POST",
+      cache: "no-store"
+    });
+
+    const payload = await parseJsonSafe(response);
+    if (!response.ok) {
+      throw new Error(payload.error || `HTTP ${response.status}`);
+    }
+
+    await refreshCapturedPreview();
+    setText("camStatus", "Da chup khung webcam hien tai de detect");
+  } catch (error) {
+    console.error("Khong chup duoc frame webcam:", error);
+    alert(`Khong chup duoc khung hien tai\n${error.message || ""}`.trim());
   }
 }
 
@@ -680,6 +752,7 @@ function bindEvents() {
   document.getElementById("disconnectCameraButton")?.addEventListener("click", disconnectCamera);
   document.getElementById("useCameraSourceButton")?.addEventListener("click", useCameraSource);
   document.getElementById("uploadImageButton")?.addEventListener("click", uploadTestImage);
+  document.getElementById("captureFrameButton")?.addEventListener("click", captureCurrentFrame);
   document.getElementById("settingsForm")?.addEventListener("submit", connectWifi);
   document.getElementById("fanSpeedSlider")?.addEventListener("input", (event) => {
     setText("fanSpeedValue", `${event.target.value}%`);
@@ -689,6 +762,8 @@ function bindEvents() {
   });
   document.getElementById("rgbPicker")?.addEventListener("input", (event) => {
     const hexColor = String(event.target.value || "#000000").toUpperCase();
+    rgbPickerDirty = true;
+    rgbPickerDraftHex = hexColor;
     setText("rgbHexValue", hexColor);
     const preview = document.getElementById("rgbPreview");
     if (preview) {
@@ -713,6 +788,8 @@ function bindEvents() {
   });
   document.getElementById("remoteRgbPicker")?.addEventListener("input", (event) => {
     const hexColor = String(event.target.value || "#000000").toUpperCase();
+    remoteRgbPickerDirty = true;
+    remoteRgbPickerDraftHex = hexColor;
     setText("remoteRgbHexValue", hexColor);
     const preview = document.getElementById("remoteRgbPreview");
     if (preview) {

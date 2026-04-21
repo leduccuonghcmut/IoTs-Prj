@@ -630,7 +630,13 @@ void main_server_task(void *pvParameters)
     }
 
     const bool ok = espnow_send_remote_command(ctx, REMOTE_CMD_DOOR, value);
-    sendJson(server, String("{\"ok\":") + boolToJson(ok) + "}");
+    if (!ok)
+    {
+      sendJson(server, String("{\"ok\":") + boolToJson(ok) + "}", 503);
+      return;
+    }
+
+    sendJson(server, buildUnifiedStateJson(ctx));
   });
 
   server.on("/remote/fan", HTTP_GET, [&]()
@@ -643,7 +649,13 @@ void main_server_task(void *pvParameters)
       if (speed > 100)
         speed = 100;
       const bool ok = espnow_send_remote_command(ctx, REMOTE_CMD_FAN_SPEED, static_cast<uint8_t>(speed));
-      sendJson(server, String("{\"ok\":") + boolToJson(ok) + "}");
+      if (!ok)
+      {
+        sendJson(server, String("{\"ok\":") + boolToJson(ok) + "}", 503);
+        return;
+      }
+
+      sendJson(server, buildUnifiedStateJson(ctx));
       return;
     }
 
@@ -676,7 +688,13 @@ void main_server_task(void *pvParameters)
     }
 
     const bool ok = espnow_send_remote_command(ctx, REMOTE_CMD_FAN_POWER, value);
-    sendJson(server, String("{\"ok\":") + boolToJson(ok) + "}");
+    if (!ok)
+    {
+      sendJson(server, String("{\"ok\":") + boolToJson(ok) + "}", 503);
+      return;
+    }
+
+    sendJson(server, buildUnifiedStateJson(ctx));
   });
 
   server.on("/remote/rgb", HTTP_ANY, [&]()
@@ -697,7 +715,13 @@ void main_server_task(void *pvParameters)
     }
 
     const bool ok = espnow_send_remote_rgb(ctx, red, green, blue);
-    sendJson(server, String("{\"ok\":") + boolToJson(ok) + "}");
+    if (!ok)
+    {
+      sendJson(server, String("{\"ok\":") + boolToJson(ok) + "}", 503);
+      return;
+    }
+
+    sendJson(server, buildUnifiedStateJson(ctx));
   });
 
   server.on("/state", HTTP_GET, [&]() { sendJson(server, buildUnifiedStateJson(ctx)); });

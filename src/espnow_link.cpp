@@ -130,6 +130,62 @@ bool sendPacket(const EspNowPacket &packet)
     return esp_now_send(g_peerMac, reinterpret_cast<const uint8_t *>(&packet), sizeof(packet)) == ESP_OK;
 }
 
+void updateRemoteHexText(uint8_t red, uint8_t green, uint8_t blue, String &hexText)
+{
+    char hexBuffer[8];
+    snprintf(hexBuffer, sizeof(hexBuffer), "#%02X%02X%02X", red, green, blue);
+    hexText = hexBuffer;
+}
+
+void applyOptimisticRemoteCommand(RemoteCommandType commandType, uint8_t value)
+{
+    if (g_ctx == nullptr || g_ctx->stateMutex == nullptr)
+        return;
+
+    if (xSemaphoreTake(g_ctx->stateMutex, pdMS_TO_TICKS(100)) != pdTRUE)
+        return;
+
+    switch (commandType)
+    {
+        case REMOTE_CMD_DOOR:
+            g_ctx->remoteDoorOpen = value != 0;
+            break;
+        case REMOTE_CMD_FAN_POWER:
+            g_ctx->remoteFanOn = value != 0;
+            if (!g_ctx->remoteFanOn)
+                g_ctx->remoteFanSpeed = 0;
+            else if (g_ctx->remoteFanSpeed == 0)
+                g_ctx->remoteFanSpeed = 100;
+            break;
+        case REMOTE_CMD_FAN_SPEED:
+            g_ctx->remoteFanSpeed = value;
+            g_ctx->remoteFanOn = value > 0;
+            break;
+        default:
+            break;
+    }
+
+    g_ctx->espNowStatus = "ESP-NOW command queued to remote board.";
+    xSemaphoreGive(g_ctx->stateMutex);
+}
+
+void applyOptimisticRemoteRgb(uint8_t red, uint8_t green, uint8_t blue)
+{
+    if (g_ctx == nullptr || g_ctx->stateMutex == nullptr)
+        return;
+
+    if (xSemaphoreTake(g_ctx->stateMutex, pdMS_TO_TICKS(100)) != pdTRUE)
+        return;
+
+    g_ctx->remoteRgbRed = red;
+    g_ctx->remoteRgbGreen = green;
+    g_ctx->remoteRgbBlue = blue;
+    g_ctx->remoteRgbOn = !(red == 0 && green == 0 && blue == 0);
+    updateRemoteHexText(red, green, blue, g_ctx->remoteRgbHexText);
+    g_ctx->espNowStatus = "ESP-NOW RGB command queued to remote board.";
+    xSemaphoreGive(g_ctx->stateMutex);
+}
+
 void updateRemoteBoardState(const EspNowPacket &packet)
 {
     if (g_ctx == nullptr || g_ctx->stateMutex == nullptr)
@@ -323,6 +379,7 @@ bool espnow_send_remote_command(AppContext *ctx, RemoteCommandType commandType, 
         return false;
     }
 
+    applyOptimisticRemoteCommand(commandType, value);
     return true;
 }
 
@@ -350,6 +407,7 @@ bool espnow_send_remote_rgb(AppContext *ctx, uint8_t red, uint8_t green, uint8_t
         return false;
     }
 
+    applyOptimisticRemoteRgb(red, green, blue);
     return true;
 }
 

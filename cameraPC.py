@@ -138,11 +138,12 @@ def upload_image():
     if request.method == "OPTIONS":
         return ("", 204)
 
-    if "image" not in request.files:
-        return jsonify({"ok": False, "error": "missing image file"}), 400
+    upload = request.files.get("image") or request.files.get("file")
+    if upload is not None:
+        file_bytes = upload.read()
+    else:
+        file_bytes = request.get_data()
 
-    file = request.files["image"]
-    file_bytes = file.read()
     if not file_bytes:
         return jsonify({"ok": False, "error": "empty file"}), 400
 
@@ -154,6 +155,23 @@ def upload_image():
     uploaded_frame = normalize_to_bgr(decoded)
     current_source = "upload"
     return jsonify({"ok": True, "source": current_source})
+
+
+@app.route("/capture_frame", methods=["POST", "OPTIONS"])
+def capture_frame():
+    global uploaded_frame
+    global current_source
+
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    frame = get_camera_frame()
+    if frame is None:
+        return jsonify({"ok": False, "error": "camera not ready"}), 500
+
+    uploaded_frame = frame.copy()
+    current_source = "upload"
+    return jsonify({"ok": True, "source": current_source, "captured": True})
 
 
 @app.route("/source", methods=["GET", "POST", "OPTIONS"])
