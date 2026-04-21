@@ -8,6 +8,6 @@
 #include "task_check_info.h"
 
 void CORE_IOT_sendata(String mode, String feed, String data);
-void CORE_IOT_reconnect();
-
+bool CORE_IOT_reconnect();
+void coreiot_thingsboard_task(void *pvParameters);
 #endif
