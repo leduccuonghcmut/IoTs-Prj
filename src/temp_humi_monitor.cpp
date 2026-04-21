@@ -1,6 +1,17 @@
 #include "temp_humi_monitor.h"
 #include "global.h"
 
+static TempLevel classifyTemperature(float t)
+{
+  if (t >= 35.0f)
+    return TEMP_CRITICAL;
+  
+  if (t >= 30.0f)
+    return TEMP_WARNING;
+  
+  return TEMP_NORMAL;
+}
+
 static LCDState classifyState(float t, float h)
 {
   if (t >= 35.0f || h < 25.0f || h > 85.0f)
@@ -44,6 +55,7 @@ void temp_humi_monitor(void *pvParameters)
 
   LCDState lastLCDState = (LCDState)(-1);
   HumiLevel lastHumiLevel = (HumiLevel)(-1);
+  TempLevel lastTempLevel = (TempLevel)(-1);
 
   while (1)
   {
@@ -92,6 +104,24 @@ void temp_humi_monitor(void *pvParameters)
       }
 
       lastHumiLevel = newHumiLevel;
+    }
+
+    TempLevel newTempLevel = classifyTemperature(temperature);
+
+    if (newTempLevel != lastTempLevel)
+    {
+      if (ctx != NULL && ctx->stateMutex != NULL && xSemaphoreTake(ctx->stateMutex, portMAX_DELAY) == pdTRUE)
+      {
+        ctx->tempLevel = newTempLevel; 
+        xSemaphoreGive(ctx->stateMutex);
+      }
+
+      if (ctx != NULL && ctx->ledTempSemaphore != NULL)
+      {
+        xSemaphoreGive(ctx->ledTempSemaphore); 
+      }
+
+      lastTempLevel = newTempLevel;
     }
 
     if (newLCDState != lastLCDState)
