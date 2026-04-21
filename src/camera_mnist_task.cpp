@@ -295,6 +295,29 @@ namespace
             return true;
         }
 
+        if (input->type == kTfLiteInt8)
+        {
+            if (input->bytes < pixelCount)
+                return false;
+
+            const float scale = input->params.scale;
+            const int zeroPoint = input->params.zero_point;
+            if (scale <= 0.0f)
+                return false;
+
+            for (int i = 0; i < kMnistImageSize * kMnistImageSize; ++i)
+            {
+                const float normalized = g_inputCanvas[i];
+                int quantized = static_cast<int>(roundf(normalized / scale)) + zeroPoint;
+                if (quantized < -128)
+                    quantized = -128;
+                if (quantized > 127)
+                    quantized = 127;
+                input->data.int8[i] = static_cast<int8_t>(quantized);
+            }
+            return true;
+        }
+
         return false;
     }
 
@@ -312,6 +335,8 @@ namespace
                 value = output->data.f[i];
             else if (output->type == kTfLiteUInt8)
                 value = static_cast<float>(output->data.uint8[i]) / 255.0f;
+            else if (output->type == kTfLiteInt8)
+                value = (static_cast<int>(output->data.int8[i]) - output->params.zero_point) * output->params.scale;
             else
                 return false;
 

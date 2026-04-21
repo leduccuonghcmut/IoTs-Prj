@@ -30,8 +30,12 @@
             <span>Tong quan</span>
           </button>
           <button class="nav-item" data-section="device">
-            <span>IO</span>
-            <span>Dieu khien</span>
+            <span>Local</span>
+            <span>Current Board</span>
+          </button>
+          <button class="nav-item" data-section="remote">
+            <span>Peer</span>
+            <span>Remote Board</span>
           </button>
           <button class="nav-item" data-section="info">
             <span>Info</span>
@@ -105,19 +109,38 @@
           </div>
 
           <div class="tinyml-grid">
-            <div class="tinyml-score-wrap">
-              <div id="tinymlScore" class="tinyml-score">--</div>
-              <div class="sensor-meta">Model anomaly score</div>
+            <div class="tinyml-score-card">
+              <div class="tinyml-score-ring">
+                <div id="tinymlScore" class="tinyml-score">--</div>
+                <span class="tinyml-score-unit">score</span>
+              </div>
+              <div class="tinyml-score-meta">
+                <div class="sensor-meta">Model anomaly score</div>
+                <strong id="tinymlSeverityText" class="tinyml-severity-text">Dang doi du lieu</strong>
+              </div>
             </div>
 
             <div class="tinyml-visual">
-              <div class="tinyml-meter">
-                <div id="tinymlMeterFill" class="tinyml-meter-fill"></div>
+              <div class="tinyml-zone-row">
+                <div class="tinyml-zone-chip tinyml-zone-normal">Normal</div>
+                <div class="tinyml-zone-chip tinyml-zone-warning">Warning</div>
+                <div class="tinyml-zone-chip tinyml-zone-anomaly">Anomaly</div>
+              </div>
+              <div class="tinyml-meter-wrap">
+                <div class="tinyml-meter">
+                  <div id="tinymlMeterFill" class="tinyml-meter-fill"></div>
+                </div>
+                <div id="tinymlPointer" class="tinyml-pointer"></div>
               </div>
               <div class="tinyml-scale">
                 <span>0.00</span>
                 <span>0.50</span>
                 <span>1.00</span>
+              </div>
+              <div class="tinyml-thresholds">
+                <span>An toan: 0.00 - 0.49</span>
+                <span>Can chu y: 0.50 - 0.79</span>
+                <span>Bat thuong: 0.80 - 1.00</span>
               </div>
               <p id="tinymlDesc" class="tinyml-desc">TinyML dang cho du lieu cam bien.</p>
             </div>
@@ -128,23 +151,12 @@
           <div class="card quick-card glass">
             <div class="quick-top">
               <div>
-                <p class="card-label">Thiet bi 1</p>
-                <h3>Relay 1</h3>
+                <p class="card-label">RGB</p>
+                <h3>NeoPixel Ngoai Vi</h3>
               </div>
-              <div id="led1Badge" class="device-badge off">OFF</div>
+              <div id="rgbOverviewBadge" class="device-badge off">OFF</div>
             </div>
-            <p class="quick-desc">Trang thai relay 1 duoc cap nhat theo thoi gian thuc.</p>
-          </div>
-
-          <div class="card quick-card glass">
-            <div class="quick-top">
-              <div>
-                <p class="card-label">Thiet bi 2</p>
-                <h3>Relay 2</h3>
-              </div>
-              <div id="led2Badge" class="device-badge off">OFF</div>
-            </div>
-            <p class="quick-desc">Trang thai relay 2 duoc dong bo tu backend.</p>
+            <p class="quick-desc">Theo doi nhanh trang thai den RGB ngoai vi dang duoc dieu khien tu web.</p>
           </div>
 
           <div class="card quick-card glass">
@@ -175,44 +187,42 @@
         <div class="section-head device-head">
           <div>
             <p class="eyebrow">DEVICE CONTROL</p>
-            <h1>Dieu khien thiet bi</h1>
-            <p class="subtext">Quan ly relay, cua va quat truc tiep tu giao dien web.</p>
+            <h1>Current Board Control</h1>
+            <p class="subtext">Quan ly NeoPixel ngoai vi, cua va quat tren board hien tai.</p>
           </div>
         </div>
 
         <div class="device-grid">
-          <div class="device-card glass">
+          <div class="device-card glass rgb-card">
             <div class="device-top">
-              <div class="device-icon lamp">1</div>
+              <div class="device-icon lamp">RGB</div>
               <div>
-                <h3>Thiet bi 1</h3>
-                <p>Relay 1 / LED 1 / Den / Bom</p>
+                <h3>NeoPixel ngoai vi</h3>
+                <p>Dieu khien tay qua web cho LED gan ngoai o chan RGB</p>
               </div>
             </div>
 
             <div class="device-status-row">
               <span>Trang thai</span>
-              <span id="led1" class="status-badge off">OFF</span>
+              <span id="rgbState" class="status-badge off">OFF</span>
             </div>
 
-            <button class="btn btn-primary btn-full" id="toggleDevice1">Bat / Tat thiet bi 1</button>
-          </div>
-
-          <div class="device-card glass">
-            <div class="device-top">
-              <div class="device-icon power">2</div>
-              <div>
-                <h3>Thiet bi 2</h3>
-                <p>Relay 2 / LED 2 / Thiet bi phu</p>
+            <div class="rgb-picker-wrap">
+              <label class="rgb-label" for="rgbPicker">Mau LED</label>
+              <div class="rgb-picker-row">
+                <input id="rgbPicker" type="color" value="#000000" />
+                <div id="rgbPreview" class="rgb-preview"></div>
+              </div>
+              <div class="rgb-hex-row">
+                <span>Ma mau</span>
+                <strong id="rgbHexValue">#000000</strong>
               </div>
             </div>
 
-            <div class="device-status-row">
-              <span>Trang thai</span>
-              <span id="led2" class="status-badge off">OFF</span>
+            <div class="fan-action-row">
+              <button class="btn btn-primary" id="applyRgbButton">Ap dung mau</button>
+              <button class="btn btn-secondary" id="turnOffRgbButton">Tat RGB</button>
             </div>
-
-            <button class="btn btn-primary btn-full" id="toggleDevice2">Bat / Tat thiet bi 2</button>
           </div>
 
           <div class="device-card glass">
@@ -261,6 +271,174 @@
               </div>
 
               <input id="fanSpeedSlider" class="fan-slider" type="range" min="0" max="100" value="0" step="10" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="remote" class="section device-section" style="display:none;">
+        <div class="section-head device-head">
+          <div>
+            <p class="eyebrow">REMOTE BOARD</p>
+            <h1>Remote Board Telemetry</h1>
+            <p class="subtext">Theo doi va dieu khien NeoPixel, cua va quat cua board giao tiep qua ESP-NOW.</p>
+          </div>
+        </div>
+
+        <div class="device-grid">
+          <div class="device-card glass">
+            <div class="device-top">
+              <div class="device-icon power">R</div>
+              <div>
+                <h3 id="remoteBoardTitle">Remote Board</h3>
+                <p>ESP-NOW peer telemetry va dieu khien tu xa</p>
+              </div>
+            </div>
+
+            <div class="device-status-row">
+              <span>ESP-NOW link</span>
+              <span id="espNowLinkState" class="status-badge off">OFFLINE</span>
+            </div>
+
+            <div class="device-status-row">
+              <span>Peer MAC</span>
+              <span id="peerMacLabel">--</span>
+            </div>
+
+            <div class="device-status-row">
+              <span>Local MAC</span>
+              <span id="localMacLabel">--</span>
+            </div>
+
+            <div class="device-status-row">
+              <span>ESP-NOW status</span>
+              <span id="espNowStatusText">--</span>
+            </div>
+          </div>
+
+          <div class="device-card glass">
+            <div class="device-top">
+              <div class="device-icon lamp">T</div>
+              <div>
+                <h3>Remote Sensors</h3>
+                <p>Du lieu moi nhan tu board giao tiep</p>
+              </div>
+            </div>
+
+            <div class="device-status-row">
+              <span>Temperature</span>
+              <span id="remoteTempValue">--</span>
+            </div>
+
+            <div class="device-status-row">
+              <span>Humidity</span>
+              <span id="remoteHumiValue">--</span>
+            </div>
+
+            <div class="device-status-row">
+              <span>Last seen</span>
+              <span id="remoteLastSeen">--</span>
+            </div>
+          </div>
+
+          <div class="device-card glass">
+            <div class="device-top">
+              <div class="device-icon power">C</div>
+              <div>
+                <h3>Pairing</h3>
+                <p>Nhap MAC cua board giao tiep de khoi dong lien ket ESP-NOW</p>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="peerMacInput">Peer MAC</label>
+              <input id="peerMacInput" type="text" placeholder="VD: 30:AE:A4:07:0D:64" />
+            </div>
+
+            <div class="door-controls">
+              <button class="btn btn-primary" id="savePeerMacButton">Luu Peer MAC</button>
+              <button class="btn btn-secondary" id="refreshEspNowButton">Lam moi</button>
+            </div>
+          </div>
+
+          <div class="device-card glass rgb-card">
+            <div class="device-top">
+              <div class="device-icon lamp">RGB</div>
+              <div>
+                <h3>Remote NeoPixel</h3>
+                <p>Dieu khien den RGB ngoai vi cua board giao tiep qua ESP-NOW</p>
+              </div>
+            </div>
+
+            <div class="device-status-row">
+              <span>Trang thai</span>
+              <span id="remoteRgbState" class="status-badge off">OFF</span>
+            </div>
+
+            <div class="rgb-picker-wrap">
+              <label class="rgb-label" for="remoteRgbPicker">Mau LED</label>
+              <div class="rgb-picker-row">
+                <input id="remoteRgbPicker" type="color" value="#000000" />
+                <div id="remoteRgbPreview" class="rgb-preview"></div>
+              </div>
+              <div class="rgb-hex-row">
+                <span>Ma mau</span>
+                <strong id="remoteRgbHexValue">#000000</strong>
+              </div>
+            </div>
+
+            <div class="fan-action-row">
+              <button class="btn btn-primary" id="applyRemoteRgbButton">Gui mau</button>
+              <button class="btn btn-secondary" id="turnOffRemoteRgbButton">Tat RGB</button>
+            </div>
+          </div>
+
+          <div class="device-card glass">
+            <div class="device-top">
+              <div class="device-icon door">D</div>
+              <div>
+                <h3>Remote Door</h3>
+                <p>Dieu khien cua cua board giao tiep</p>
+              </div>
+            </div>
+
+            <div class="device-status-row">
+              <span>Trang thai</span>
+              <span id="remoteDoorState" class="status-badge off">--</span>
+            </div>
+
+            <div class="door-controls">
+              <button class="btn btn-success" id="openRemoteDoor">Mo cua</button>
+              <button class="btn btn-danger" id="closeRemoteDoor">Dong cua</button>
+            </div>
+          </div>
+
+          <div class="device-card glass fan-card">
+            <div class="device-top">
+              <div class="device-icon fan">F</div>
+              <div>
+                <h3>Remote Fan</h3>
+                <p>Bat tat va thay doi toc do quat tu xa</p>
+              </div>
+            </div>
+
+            <div class="device-status-row">
+              <span>Trang thai</span>
+              <span id="remoteFanState" class="status-badge off">OFF</span>
+            </div>
+
+            <div class="fan-action-row">
+              <button class="btn btn-primary" id="remoteFanOnButton">Fan ON</button>
+              <button class="btn btn-secondary" id="remoteFanOffButton">Fan OFF</button>
+            </div>
+
+            <div class="fan-speed-box">
+              <div class="fan-speed-label">
+                <span>Toc do quat</span>
+                <strong id="remoteFanSpeedValue">0%</strong>
+              </div>
+
+              <input id="remoteFanSpeedSlider" class="fan-slider" type="range" min="0" max="100" value="0" step="10" />
             </div>
           </div>
         </div>
@@ -356,6 +534,15 @@
               <button class="btn btn-primary" id="savePcIpButton">Luu IP</button>
               <button class="btn btn-success" id="connectCameraButton">Ket noi stream</button>
               <button class="btn btn-danger" id="disconnectCameraButton">Ngat</button>
+            </div>
+
+            <div class="camera-input-row">
+              <input id="imageUploadInput" type="file" accept="image/*" class="camera-input" />
+            </div>
+
+            <div class="camera-action-row">
+              <button class="btn btn-secondary" id="useCameraSourceButton">Dung webcam</button>
+              <button class="btn btn-primary" id="uploadImageButton">Tai anh test</button>
             </div>
 
             <p id="camStatus" class="camera-status-text">Trang thai: Chua ket noi</p>

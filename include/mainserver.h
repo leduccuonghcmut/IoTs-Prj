@@ -21,6 +21,10 @@ String settingsPage();
 void startAP();
 void setupServer();
 void connectToWiFi();
+void local_set_relay(AppContext *ctx, uint8_t relayIndex, bool on);
+void local_set_door(AppContext *ctx, bool open);
+void local_set_fan(AppContext *ctx, bool on, uint8_t speed);
+void local_set_rgb(AppContext *ctx, uint8_t red, uint8_t green, uint8_t blue);
 
 void main_server_task(void *pvParameters);
 

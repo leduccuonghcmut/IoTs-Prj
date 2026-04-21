@@ -26,12 +26,30 @@ void Load_info_File(AppContext *ctx)
 
   if (ctx != NULL && ctx->configMutex != NULL && xSemaphoreTake(ctx->configMutex, portMAX_DELAY) == pdTRUE)
   {
-    ctx->wifiSsid = doc["WIFI_SSID"] | "";
-    ctx->wifiPass = doc["WIFI_PASS"] | "";
-    ctx->coreIotToken = doc["CORE_IOT_TOKEN"] | "";
-    ctx->coreIotServer = doc["CORE_IOT_SERVER"] | "";
-    ctx->coreIotPort = doc["CORE_IOT_PORT"] | "";
-    ctx->cameraHost = doc["CAMERA_HOST"] | "";
+    const String storedWifiSsid = doc["WIFI_SSID"] | "";
+    const String storedWifiPass = doc["WIFI_PASS"] | "";
+    const String storedCoreIotToken = doc["CORE_IOT_TOKEN"] | "";
+    const String storedCoreIotServer = doc["CORE_IOT_SERVER"] | "";
+    const String storedCoreIotPort = doc["CORE_IOT_PORT"] | "";
+    const String storedCameraHost = doc["CAMERA_HOST"] | "";
+    const String storedPeerMac = doc["PEER_MAC"] | "";
+
+    if (!storedWifiSsid.isEmpty())
+    {
+      ctx->wifiSsid = storedWifiSsid;
+      ctx->wifiPass = storedWifiPass;
+    }
+    if (!storedCoreIotToken.isEmpty())
+      ctx->coreIotToken = storedCoreIotToken;
+    if (!storedCoreIotServer.isEmpty())
+      ctx->coreIotServer = storedCoreIotServer;
+    if (!storedCoreIotPort.isEmpty())
+      ctx->coreIotPort = storedCoreIotPort;
+    if (!storedCameraHost.isEmpty())
+      ctx->cameraHost = storedCameraHost;
+    if (!storedPeerMac.isEmpty())
+      ctx->peerMac = storedPeerMac;
+
     xSemaphoreGive(ctx->configMutex);
   }
 
@@ -47,7 +65,7 @@ void Delete_info_File()
   ESP.restart();
 }
 
-void Save_info_File(String wifiSsid, String wifiPass, String coreIotToken, String coreIotServer, String coreIotPort, String cameraHost)
+void Save_info_File(String wifiSsid, String wifiPass, String coreIotToken, String coreIotServer, String coreIotPort, String cameraHost, String peerMac)
 {
   DynamicJsonDocument doc(4096);
   doc["WIFI_SSID"] = wifiSsid;
@@ -56,6 +74,7 @@ void Save_info_File(String wifiSsid, String wifiPass, String coreIotToken, Strin
   doc["CORE_IOT_SERVER"] = coreIotServer;
   doc["CORE_IOT_PORT"] = coreIotPort;
   doc["CAMERA_HOST"] = cameraHost;
+  doc["PEER_MAC"] = peerMac;
 
   File configFile = LittleFS.open("/info.dat", "w");
   if (configFile)
