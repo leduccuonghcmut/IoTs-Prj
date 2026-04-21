@@ -18,11 +18,15 @@ namespace
     constexpr int kMnistImageSize = 28;
     constexpr int kDigitCanvasSize = 20;
     constexpr size_t kFrameBytes = kCameraFrameSize * kCameraFrameSize;
+    constexpr int kMaxPixels = kCameraFrameSize * kCameraFrameSize;
     constexpr int kTensorArenaSize = 60 * 1024;
     constexpr TickType_t kCameraPollDelay = pdMS_TO_TICKS(2000);
     constexpr TickType_t kRetryDelay = pdMS_TO_TICKS(3000);
 
     static uint8_t g_frameBuffer[kFrameBytes];
+    static uint8_t g_binaryMask[kMaxPixels];
+    static uint8_t g_selectedMask[kMaxPixels];
+    static uint16_t g_componentQueue[kMaxPixels];
     static float g_inputCanvas[kMnistImageSize * kMnistImageSize];
     static uint8_t g_tensorArena[kTensorArenaSize];
     static tflite::AllOpsResolver g_resolver;
@@ -43,6 +47,18 @@ namespace
         int foregroundCount;
         float fillRatio;
         float centerOffset;
+        bool valid;
+    };
+
+    struct ComponentStats
+    {
+        int minX;
+        int minY;
+        int maxX;
+        int maxY;
+        int count;
+        float centerOffset;
+        float score;
         bool valid;
     };
 
@@ -230,6 +246,129 @@ namespace
         return box;
     }
 
+    void clearCanvas()
+    {
+        for (float &value : g_inputCanvas)
+            value = 0.0f;
+    }
+
+    void buildBinaryMask(bool darkDigitOnBrightBg, uint8_t threshold)
+    {
+        for (int y = 0; y < kCameraFrameSize; ++y)
+        {
+            for (int x = 0; x < kCameraFrameSize; ++x)
+            {
+                const uint8_t value = g_frameBuffer[y * kCameraFrameSize + x];
+                const bool foreground = darkDigitOnBrightBg ? (value <= threshold) : (value >= threshold);
+                g_binaryMask[y * kCameraFrameSize + x] = foreground ? 1 : 0;
+                g_selectedMask[y * kCameraFrameSize + x] = 0;
+            }
+        }
+    }
+
+    ComponentStats findBestComponent()
+    {
+        ComponentStats best{ 0, 0, 0, 0, 0, 0.0f, -1000000.0f, false };
+        const float frameCenter = (kCameraFrameSize - 1) * 0.5f;
+
+        for (int y = 0; y < kCameraFrameSize; ++y)
+        {
+            for (int x = 0; x < kCameraFrameSize; ++x)
+            {
+                const int startIndex = y * kCameraFrameSize + x;
+                if (g_binaryMask[startIndex] == 0)
+                    continue;
+
+                int queueHead = 0;
+                int queueTail = 0;
+                g_componentQueue[queueTail++] = static_cast<uint16_t>(startIndex);
+                g_binaryMask[startIndex] = 0;
+
+                ComponentStats current{ x, y, x, y, 0, 0.0f, 0.0f, true };
+                long sumX = 0;
+                long sumY = 0;
+
+                while (queueHead < queueTail)
+                {
+                    const int currentIndex = g_componentQueue[queueHead++];
+                    const int currentY = currentIndex / kCameraFrameSize;
+                    const int currentX = currentIndex % kCameraFrameSize;
+
+                    ++current.count;
+                    sumX += currentX;
+                    sumY += currentY;
+
+                    if (currentX < current.minX)
+                        current.minX = currentX;
+                    if (currentY < current.minY)
+                        current.minY = currentY;
+                    if (currentX > current.maxX)
+                        current.maxX = currentX;
+                    if (currentY > current.maxY)
+                        current.maxY = currentY;
+
+                    if (currentX > 0)
+                    {
+                        const int leftIndex = currentIndex - 1;
+                        if (g_binaryMask[leftIndex] != 0)
+                        {
+                            g_binaryMask[leftIndex] = 0;
+                            g_componentQueue[queueTail++] = static_cast<uint16_t>(leftIndex);
+                        }
+                    }
+                    if (currentX + 1 < kCameraFrameSize)
+                    {
+                        const int rightIndex = currentIndex + 1;
+                        if (g_binaryMask[rightIndex] != 0)
+                        {
+                            g_binaryMask[rightIndex] = 0;
+                            g_componentQueue[queueTail++] = static_cast<uint16_t>(rightIndex);
+                        }
+                    }
+                    if (currentY > 0)
+                    {
+                        const int upIndex = currentIndex - kCameraFrameSize;
+                        if (g_binaryMask[upIndex] != 0)
+                        {
+                            g_binaryMask[upIndex] = 0;
+                            g_componentQueue[queueTail++] = static_cast<uint16_t>(upIndex);
+                        }
+                    }
+                    if (currentY + 1 < kCameraFrameSize)
+                    {
+                        const int downIndex = currentIndex + kCameraFrameSize;
+                        if (g_binaryMask[downIndex] != 0)
+                        {
+                            g_binaryMask[downIndex] = 0;
+                            g_componentQueue[queueTail++] = static_cast<uint16_t>(downIndex);
+                        }
+                    }
+                }
+
+                if (current.count <= 0)
+                    continue;
+
+                const float centerX = static_cast<float>(sumX) / static_cast<float>(current.count);
+                const float centerY = static_cast<float>(sumY) / static_cast<float>(current.count);
+                const float offsetX = fabsf(centerX - frameCenter);
+                const float offsetY = fabsf(centerY - frameCenter);
+                current.centerOffset = sqrtf(offsetX * offsetX + offsetY * offsetY);
+                current.score = static_cast<float>(current.count) - current.centerOffset * 6.5f;
+
+                if (current.score > best.score)
+                {
+                    best = current;
+                    for (int i = 0; i < queueTail; ++i)
+                    {
+                        g_selectedMask[g_componentQueue[i]] = 1;
+                    }
+                }
+            }
+        }
+
+        return best;
+    }
+
     bool prepareMnistCanvas(PreparedDigitStats &stats)
     {
         stats = { 0, 0, 0, 0.0f, 0.0f, false };
@@ -248,59 +387,59 @@ namespace
         if (threshold > 245)
             threshold = 245;
 
-        const DigitBBox box = locateDigit(darkDigitOnBrightBg, static_cast<uint8_t>(threshold));
-        if (box.count < 40 || box.maxX <= box.minX || box.maxY <= box.minY)
+        buildBinaryMask(darkDigitOnBrightBg, static_cast<uint8_t>(threshold));
+        const ComponentStats component = findBestComponent();
+        if (!component.valid || component.count < 48 || component.maxX <= component.minX || component.maxY <= component.minY)
         {
-            for (float &value : g_inputCanvas)
-                value = 0.0f;
+            clearCanvas();
             return false;
         }
 
-        const int width = box.maxX - box.minX + 1;
-        const int height = box.maxY - box.minY + 1;
+        const int width = component.maxX - component.minX + 1;
+        const int height = component.maxY - component.minY + 1;
         const float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
-        const float fillRatio = static_cast<float>(box.count) / static_cast<float>(width * height);
-        const float centerX = (box.minX + box.maxX) * 0.5f;
-        const float centerY = (box.minY + box.maxY) * 0.5f;
-        const float frameCenter = (kCameraFrameSize - 1) * 0.5f;
-        const float centerOffsetX = fabsf(centerX - frameCenter);
-        const float centerOffsetY = fabsf(centerY - frameCenter);
-        const float centerOffset = centerOffsetX > centerOffsetY ? centerOffsetX : centerOffsetY;
+        const float fillRatio = static_cast<float>(component.count) / static_cast<float>(width * height);
+        const float centerOffset = component.centerOffset;
 
         stats.width = width;
         stats.height = height;
-        stats.foregroundCount = box.count;
+        stats.foregroundCount = component.count;
         stats.fillRatio = fillRatio;
         stats.centerOffset = centerOffset;
 
         const bool sizeOk = width >= 10 && height >= 10 && width <= 84 && height <= 84;
         const bool aspectOk = aspectRatio >= 0.18f && aspectRatio <= 1.85f;
-        const bool densityOk = fillRatio >= 0.03f && fillRatio <= 0.70f;
-        const bool centeredEnough = centerOffset <= 24.0f;
+        const bool densityOk = fillRatio >= 0.05f && fillRatio <= 0.60f;
+        const bool centeredEnough = centerOffset <= 22.0f;
         if (!(sizeOk && aspectOk && densityOk && centeredEnough))
         {
-            for (float &value : g_inputCanvas)
-                value = 0.0f;
+            clearCanvas();
             return false;
         }
 
-        const float scaleX = static_cast<float>(width) / static_cast<float>(kDigitCanvasSize);
-        const float scaleY = static_cast<float>(height) / static_cast<float>(kDigitCanvasSize);
+        clearCanvas();
+        const float scale = static_cast<float>(kDigitCanvasSize) / static_cast<float>(width > height ? width : height);
+        const int scaledWidth = static_cast<int>(width * scale + 0.5f);
+        const int scaledHeight = static_cast<int>(height * scale + 0.5f);
+        const int offsetX = (kMnistImageSize - scaledWidth) / 2;
+        const int offsetY = (kMnistImageSize - scaledHeight) / 2;
 
-        for (float &value : g_inputCanvas)
-            value = 0.0f;
-
-        for (int dstY = 0; dstY < kDigitCanvasSize; ++dstY)
+        for (int dstY = 0; dstY < scaledHeight; ++dstY)
         {
-            const int srcY = box.minY + static_cast<int>(dstY * scaleY);
-            for (int dstX = 0; dstX < kDigitCanvasSize; ++dstX)
+            const int srcY = component.minY + static_cast<int>((static_cast<float>(dstY) / scale));
+            for (int dstX = 0; dstX < scaledWidth; ++dstX)
             {
-                const int srcX = box.minX + static_cast<int>(dstX * scaleX);
-                const uint8_t pixel = g_frameBuffer[srcY * kCameraFrameSize + srcX];
-                const bool foreground = darkDigitOnBrightBg ? (pixel <= threshold) : (pixel >= threshold);
-                const int canvasX = dstX + 4;
-                const int canvasY = dstY + 4;
-                g_inputCanvas[canvasY * kMnistImageSize + canvasX] = foreground ? 1.0f : 0.0f;
+                const int srcX = component.minX + static_cast<int>((static_cast<float>(dstX) / scale));
+                const int srcIndex = srcY * kCameraFrameSize + srcX;
+                if (g_selectedMask[srcIndex] == 0)
+                    continue;
+
+                const int canvasX = offsetX + dstX;
+                const int canvasY = offsetY + dstY;
+                if (canvasX >= 0 && canvasX < kMnistImageSize && canvasY >= 0 && canvasY < kMnistImageSize)
+                {
+                    g_inputCanvas[canvasY * kMnistImageSize + canvasX] = 1.0f;
+                }
             }
         }
 
@@ -485,8 +624,8 @@ void camera_mnist_task(void *pvParameters)
             return;
         }
 
-        const bool confidenceOk = confidence >= 0.92f;
-        const bool marginOk = margin >= 0.12f;
+        const bool confidenceOk = confidence >= 0.97f;
+        const bool marginOk = margin >= 0.18f;
         if (!(confidenceOk && marginOk))
         {
             String rejectStatus = "Model chua du chac chan";

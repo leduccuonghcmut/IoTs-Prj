@@ -388,6 +388,24 @@ void local_set_rgb(AppContext *ctx, uint8_t red, uint8_t green, uint8_t blue)
     xSemaphoreGive(ctx->rgbSemaphore);
 }
 
+void set_remote_rgb_shadow(AppContext *ctx, uint8_t red, uint8_t green, uint8_t blue)
+{
+  if (ctx == NULL || !lockWithTimeout(ctx->stateMutex, pdMS_TO_TICKS(100)))
+    return;
+
+  ctx->remoteRgbRed = red;
+  ctx->remoteRgbGreen = green;
+  ctx->remoteRgbBlue = blue;
+  ctx->remoteRgbOn = !(red == 0 && green == 0 && blue == 0);
+  ctx->remoteLastSeenMs = millis();
+
+  char hexBuffer[8];
+  snprintf(hexBuffer, sizeof(hexBuffer), "#%02X%02X%02X", red, green, blue);
+  ctx->remoteRgbHexText = hexBuffer;
+
+  xSemaphoreGive(ctx->stateMutex);
+}
+
 void startAP()
 {
 }
@@ -479,9 +497,6 @@ void main_server_task(void *pvParameters)
   doorServoDevice().attach(DOOR_PIN, 500, 2400);
   doorServoDevice().write(0);
   setLocalActuatorState(ctx, false, false, false, false, 0);
-
-  if (!LittleFS.begin(true))
-    Serial.println("LittleFS mount failed");
 
   startApMode();
   beginStation();
@@ -697,7 +712,14 @@ void main_server_task(void *pvParameters)
     }
 
     const bool ok = espnow_send_remote_rgb(ctx, red, green, blue);
-    sendJson(server, String("{\"ok\":") + boolToJson(ok) + "}");
+    if (!ok)
+    {
+      sendJson(server, "{\"ok\":false,\"error\":\"ESP-NOW peer not ready\"}", 503);
+      return;
+    }
+
+    set_remote_rgb_shadow(ctx, red, green, blue);
+    sendJson(server, buildUnifiedStateJson(ctx));
   });
 
   server.on("/state", HTTP_GET, [&]() { sendJson(server, buildUnifiedStateJson(ctx)); });

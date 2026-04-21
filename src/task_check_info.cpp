@@ -1,10 +1,49 @@
 #include "task_check_info.h"
 
+namespace
+{
+bool ensureLittleFsMounted()
+{
+  static bool mounted = false;
+  if (mounted)
+    return true;
+
+  mounted = LittleFS.begin(true);
+  return mounted;
+}
+
+void saveDefaultInfoFile()
+{
+  if (LittleFS.exists("/info.dat"))
+    return;
+
+  DynamicJsonDocument doc(512);
+  doc["WIFI_SSID"] = "";
+  doc["WIFI_PASS"] = "";
+  doc["CORE_IOT_TOKEN"] = "";
+  doc["CORE_IOT_SERVER"] = "";
+  doc["CORE_IOT_PORT"] = "";
+  doc["CAMERA_HOST"] = "";
+  doc["PEER_MAC"] = "";
+
+  File configFile = LittleFS.open("/info.dat", "w");
+  if (!configFile)
+  {
+    Serial.println("[INFO] Unable to create default /info.dat");
+    return;
+  }
+
+  serializeJson(doc, configFile);
+  configFile.close();
+}
+}
+
 void Load_info_File(AppContext *ctx)
 {
   if (!LittleFS.exists("/info.dat"))
   {
     Serial.println("[INFO] /info.dat not found, using default config");
+    saveDefaultInfoFile();
     return;
   }
 
@@ -94,7 +133,7 @@ bool check_info_File(AppContext *ctx, bool check)
 {
   if (!check)
   {
-    if (!LittleFS.begin(true))
+    if (!ensureLittleFsMounted())
     {
       Serial.println("LittleFS init failed");
       return false;

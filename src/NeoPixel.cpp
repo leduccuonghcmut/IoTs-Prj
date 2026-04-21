@@ -5,7 +5,7 @@
 #include "global.h"
 
 #ifndef RGB_PIN
-#define RGB_PIN 6
+#define RGB_PIN 4
 #endif
 
 #ifndef RGB_LED_COUNT

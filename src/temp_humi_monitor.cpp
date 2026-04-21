@@ -39,18 +39,28 @@ void temp_humi_monitor(void *pvParameters)
 {
   AppContext *ctx = static_cast<AppContext *>(pvParameters);
   DHT20 dht20;
-  Wire.begin(11, 12);
-  dht20.begin();
+  if (ctx != NULL && ctx->i2cMutex != NULL && xSemaphoreTake(ctx->i2cMutex, pdMS_TO_TICKS(500)) == pdTRUE)
+  {
+    Wire.begin(21, 22);
+    dht20.begin();
+    xSemaphoreGive(ctx->i2cMutex);
+  }
 
   LCDState lastLCDState = (LCDState)(-1);
   HumiLevel lastHumiLevel = (HumiLevel)(-1);
 
   while (1)
   {
-    dht20.read();
+    float temperature = NAN;
+    float humidity = NAN;
 
-    float temperature = dht20.getTemperature();
-    float humidity = dht20.getHumidity();
+    if (ctx != NULL && ctx->i2cMutex != NULL && xSemaphoreTake(ctx->i2cMutex, pdMS_TO_TICKS(500)) == pdTRUE)
+    {
+      dht20.read();
+      temperature = dht20.getTemperature();
+      humidity = dht20.getHumidity();
+      xSemaphoreGive(ctx->i2cMutex);
+    }
 
     if (isnan(temperature) || isnan(humidity))
     {

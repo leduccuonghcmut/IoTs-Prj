@@ -5,8 +5,6 @@
 #include "neo_blinky.h"
 #include "temp_humi_monitor.h"
 #include "mainserver.h"
-#include "tinyml.h"
-#include "camera_mnist_task.h"
 #include "espnow_link.h"
 #include "lcd_display_task.h"
 #include "task_check_info.h"
@@ -29,6 +27,7 @@ void setup()
   ctx->stateMutex = xSemaphoreCreateMutex();
   ctx->configMutex = xSemaphoreCreateMutex();
   ctx->serialMutex = xSemaphoreCreateMutex();
+  ctx->i2cMutex = xSemaphoreCreateMutex();
 
   ctx->tempLevel = TEMP_NORMAL;
   ctx->humiLevel = HUMI_NORMAL;
@@ -77,7 +76,7 @@ void setup()
   ctx->espNowStatus = "ESP-NOW not initialized.";
   ctx->remoteBoardName = "Remote Board";
   ctx->remoteRgbHexText = "#000000";
-  ctx->apSsid = "ESP32 cua bao!!!";
+  ctx->apSsid = "ESP32 yolo kit cua bao!!!";
   ctx->apPassword = "12345678";
   ctx->wifiSsid = "ACLAB";
   ctx->wifiPass = "ACLAB2023";
@@ -88,12 +87,8 @@ void setup()
   xTaskCreate(lcd_display_task, "Task LCD Display", 4096, ctx, 2, NULL);
   xTaskCreate(main_server_task, "Task Main Server", 8192, ctx, 2, NULL);
   xTaskCreate(espnow_link_task, "ESP-NOW Link", 8192, ctx, 2, NULL);
-  xTaskCreate(tiny_ml_task, "Tiny ML Task", 8192, ctx, 2, NULL);
-  xTaskCreate(camera_mnist_task, "Camera MNIST Task", 16384, ctx, 2, NULL);
   xTaskCreate(coreiot_thingsboard_task, "CoreIOT Task", 8192, ctx, 2, NULL);
   xTaskCreate(led_blinky, "Task LED Blink", 2048, ctx, 2, NULL);
-  xTaskCreate(neo_blinky, "Task NEO Blink", 2048, ctx, 2, NULL);
-  xTaskCreate(NeoPixel, "External NeoPixel", 4096, ctx, 2, NULL);
 }
 
 void loop()

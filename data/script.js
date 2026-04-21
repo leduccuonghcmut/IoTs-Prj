@@ -2,6 +2,12 @@ const POLL_SENSORS_MS = 2000;
 const POLL_STATE_MS = 3000;
 const POLL_WIFI_MS = 3000;
 const POLL_CAMERA_MS = 4000;
+const RGB_SYNC_HOLD_MS = 5000;
+
+let localRgbPendingHex = "";
+let localRgbPendingUntil = 0;
+let remoteRgbPendingHex = "";
+let remoteRgbPendingUntil = 0;
 
 function getCameraHost() {
   return document.getElementById("pcIpInput")?.value?.trim() || localStorage.getItem("pc_ip") || "";
@@ -10,6 +16,19 @@ function getCameraHost() {
 function getCameraBaseUrl() {
   const host = getCameraHost();
   return host ? `http://${host}` : "";
+}
+
+async function parseJsonSafe(response) {
+  const text = await response.text();
+  if (!text) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    return { raw: text };
+  }
 }
 
 function setText(id, value) {
@@ -90,6 +109,54 @@ function formatLastSeen(ms) {
   return `${(value / 1000).toFixed(1)} s`;
 }
 
+function holdPendingRgb(target, hexColor) {
+  const normalizedHex = String(hexColor || "#000000").trim().toUpperCase();
+  const expiresAt = Date.now() + RGB_SYNC_HOLD_MS;
+
+  if (target === "remote") {
+    remoteRgbPendingHex = normalizedHex;
+    remoteRgbPendingUntil = expiresAt;
+    return;
+  }
+
+  localRgbPendingHex = normalizedHex;
+  localRgbPendingUntil = expiresAt;
+}
+
+function resolveRgbDisplay(target, backendHex, backendOn) {
+  const normalizedHex = typeof backendHex === "string" && backendHex.trim() ? backendHex.trim().toUpperCase() : "#000000";
+  const now = Date.now();
+  const pendingHex = target === "remote" ? remoteRgbPendingHex : localRgbPendingHex;
+  const pendingUntil = target === "remote" ? remoteRgbPendingUntil : localRgbPendingUntil;
+
+  if (pendingHex && normalizedHex === pendingHex) {
+    if (target === "remote") {
+      remoteRgbPendingHex = "";
+      remoteRgbPendingUntil = 0;
+    } else {
+      localRgbPendingHex = "";
+      localRgbPendingUntil = 0;
+    }
+
+    return {
+      rgbHex: normalizedHex,
+      rgbOn: backendOn
+    };
+  }
+
+  if (pendingHex && now < pendingUntil) {
+    return {
+      rgbHex: pendingHex,
+      rgbOn: pendingHex !== "#000000"
+    };
+  }
+
+  return {
+    rgbHex: normalizedHex,
+    rgbOn: backendOn
+  };
+}
+
 function applyLocalState(data) {
   const doorOpen = String(data.door || "closed").toLowerCase() === "open";
   const fanOn = data.fan_on === true || String(data.fan || "OFF").toUpperCase() === "ON";
@@ -108,8 +175,9 @@ function applyLocalState(data) {
 }
 
 function applyRgbState(data) {
-  const rgbOn = data.rgb_on === true || String(data.rgb_on).toLowerCase() === "true";
-  const rgbHex = typeof data.rgb_hex === "string" && data.rgb_hex.trim() ? data.rgb_hex.trim().toUpperCase() : "#000000";
+  const backendRgbOn = data.rgb_on === true || String(data.rgb_on).toLowerCase() === "true";
+  const backendRgbHex = typeof data.rgb_hex === "string" && data.rgb_hex.trim() ? data.rgb_hex.trim().toUpperCase() : "#000000";
+  const { rgbOn, rgbHex } = resolveRgbDisplay("local", backendRgbHex, backendRgbOn);
 
   setBooleanBadge("rgbState", rgbOn);
   setBooleanBadge("rgbOverviewBadge", rgbOn);
@@ -132,8 +200,9 @@ function applyRemoteState(data) {
   const remoteDoorOpen = String(data.remote_door || "closed").toLowerCase() === "open";
   const remoteFanOn = data.remote_fan_on === true || String(data.remote_fan_on).toLowerCase() === "true";
   const remoteFanSpeed = Number.isFinite(Number(data.remote_fan_speed)) ? Number(data.remote_fan_speed) : 0;
-  const remoteRgbOn = data.remote_rgb_on === true || String(data.remote_rgb_on).toLowerCase() === "true";
-  const remoteRgbHex = typeof data.remote_rgb_hex === "string" && data.remote_rgb_hex.trim() ? data.remote_rgb_hex.trim().toUpperCase() : "#000000";
+  const backendRemoteRgbOn = data.remote_rgb_on === true || String(data.remote_rgb_on).toLowerCase() === "true";
+  const backendRemoteRgbHex = typeof data.remote_rgb_hex === "string" && data.remote_rgb_hex.trim() ? data.remote_rgb_hex.trim().toUpperCase() : "#000000";
+  const { rgbOn: remoteRgbOn, rgbHex: remoteRgbHex } = resolveRgbDisplay("remote", backendRemoteRgbHex, backendRemoteRgbOn);
 
   setBooleanBadge("remoteDoorState", remoteDoorOpen, "OPEN", "CLOSED");
   setBooleanBadge("remoteFanState", remoteFanOn);
@@ -299,22 +368,28 @@ async function setFanSpeed(value) {
 async function applyRgbColor() {
   const picker = document.getElementById("rgbPicker");
   const hexColor = picker?.value?.trim() || "#000000";
+  holdPendingRgb("local", hexColor);
 
   try {
-    await fetchJson(`/rgb?hex=${encodeURIComponent(hexColor)}`);
-    await loadDeviceState();
+    const data = await fetchJson(`/rgb?hex=${encodeURIComponent(hexColor)}`);
+    applyUnifiedState(data);
   } catch (error) {
     console.error("RGB control error:", error);
+    localRgbPendingHex = "";
+    localRgbPendingUntil = 0;
     alert("Khong dieu khien duoc NeoPixel ngoai vi");
   }
 }
 
 async function turnOffRgb() {
+  holdPendingRgb("local", "#000000");
   try {
-    await fetchJson("/rgb?hex=000000");
-    await loadDeviceState();
+    const data = await fetchJson("/rgb?hex=000000");
+    applyUnifiedState(data);
   } catch (error) {
     console.error("RGB off error:", error);
+    localRgbPendingHex = "";
+    localRgbPendingUntil = 0;
     alert("Khong tat duoc NeoPixel ngoai vi");
   }
 }
@@ -352,22 +427,36 @@ async function setRemoteFanSpeed(value) {
 async function applyRemoteRgbColor() {
   const picker = document.getElementById("remoteRgbPicker");
   const hexColor = picker?.value?.trim() || "#000000";
+  holdPendingRgb("remote", hexColor);
 
   try {
-    await fetchJson(`/remote/rgb?hex=${encodeURIComponent(hexColor)}`);
-    setTimeout(loadDeviceState, 400);
+    const data = await fetchJson(`/remote/rgb?hex=${encodeURIComponent(hexColor)}`);
+    if (data && Object.prototype.hasOwnProperty.call(data, "remote_rgb_hex")) {
+      applyUnifiedState(data);
+    } else {
+      setTimeout(loadDeviceState, 400);
+    }
   } catch (error) {
     console.error("Remote RGB control error:", error);
+    remoteRgbPendingHex = "";
+    remoteRgbPendingUntil = 0;
     alert("Khong gui duoc mau RGB toi board giao tiep");
   }
 }
 
 async function turnOffRemoteRgb() {
+  holdPendingRgb("remote", "#000000");
   try {
-    await fetchJson("/remote/rgb?hex=000000");
-    setTimeout(loadDeviceState, 400);
+    const data = await fetchJson("/remote/rgb?hex=000000");
+    if (data && Object.prototype.hasOwnProperty.call(data, "remote_rgb_hex")) {
+      applyUnifiedState(data);
+    } else {
+      setTimeout(loadDeviceState, 400);
+    }
   } catch (error) {
     console.error("Remote RGB off error:", error);
+    remoteRgbPendingHex = "";
+    remoteRgbPendingUntil = 0;
     alert("Khong tat duoc RGB cua board giao tiep");
   }
 }
@@ -592,6 +681,13 @@ async function setCameraSource(sourceName) {
   return response.json();
 }
 
+async function refreshCapturedPreview() {
+  const image = document.getElementById("cameraView");
+  if (image) {
+    image.src = `${getCameraBaseUrl()}/current_frame?t=${Date.now()}`;
+  }
+}
+
 async function useCameraSource() {
   try {
     const saved = await savePcIp();
@@ -638,19 +734,48 @@ async function uploadTestImage() {
       cache: "no-store"
     });
 
+    const payload = await parseJsonSafe(response);
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      throw new Error(payload.error || `HTTP ${response.status}`);
     }
 
-    const image = document.getElementById("cameraView");
-    if (image) {
-      image.src = `${baseUrl}/current_frame?t=${Date.now()}`;
-    }
+    await refreshCapturedPreview();
 
     setText("camStatus", `Da tai anh test: ${file.name}`);
   } catch (error) {
     console.error("Khong tai duoc anh test:", error);
-    alert("Khong tai duoc anh test len camera server");
+    alert(`Khong tai duoc anh test len camera server\n${error.message || ""}`.trim());
+  }
+}
+
+async function captureCurrentFrame() {
+  const baseUrl = getCameraBaseUrl();
+  if (!baseUrl) {
+    alert("Chua co IP PC");
+    return;
+  }
+
+  try {
+    const saved = await savePcIp();
+    if (!saved) {
+      return;
+    }
+
+    const response = await fetch(`${baseUrl}/capture_frame`, {
+      method: "POST",
+      cache: "no-store"
+    });
+
+    const payload = await parseJsonSafe(response);
+    if (!response.ok) {
+      throw new Error(payload.error || `HTTP ${response.status}`);
+    }
+
+    await refreshCapturedPreview();
+    setText("camStatus", "Da chup khung webcam hien tai de detect");
+  } catch (error) {
+    console.error("Khong chup duoc frame webcam:", error);
+    alert(`Khong chup duoc khung hien tai\n${error.message || ""}`.trim());
   }
 }
 
@@ -680,6 +805,7 @@ function bindEvents() {
   document.getElementById("disconnectCameraButton")?.addEventListener("click", disconnectCamera);
   document.getElementById("useCameraSourceButton")?.addEventListener("click", useCameraSource);
   document.getElementById("uploadImageButton")?.addEventListener("click", uploadTestImage);
+  document.getElementById("captureFrameButton")?.addEventListener("click", captureCurrentFrame);
   document.getElementById("settingsForm")?.addEventListener("submit", connectWifi);
   document.getElementById("fanSpeedSlider")?.addEventListener("input", (event) => {
     setText("fanSpeedValue", `${event.target.value}%`);

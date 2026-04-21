@@ -1,7 +1,7 @@
 #ifndef GLOBAL_H
 #define GLOBAL_H
 
-#include <Arduino.h>
+#include "serial_compat.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -66,6 +66,7 @@ typedef struct
     SemaphoreHandle_t stateMutex;
     SemaphoreHandle_t configMutex;
     SemaphoreHandle_t serialMutex;
+    SemaphoreHandle_t i2cMutex;
 
     TempLevel tempLevel;
     HumiLevel humiLevel;

@@ -10,12 +10,15 @@ void lcd_display_task(void *pvParameters)
   LiquidCrystal_I2C lcd(0x21, 16, 2);
 
   delay(500);
-  Wire.begin(11, 12);
-  delay(100);
-
-  lcd.begin();
-  lcd.backlight();
-  lcd.clear();
+  if (ctx != NULL && ctx->i2cMutex != NULL && xSemaphoreTake(ctx->i2cMutex, pdMS_TO_TICKS(500)) == pdTRUE)
+  {
+    Wire.begin(21, 22);
+    delay(100);
+    lcd.begin();
+    lcd.backlight();
+    lcd.clear();
+    xSemaphoreGive(ctx->i2cMutex);
+  }
 
   SensorData latestData = {0.0f, 0.0f};
   LCDState currentState = LCD_NORMAL;
@@ -42,27 +45,31 @@ void lcd_display_task(void *pvParameters)
         currentState = LCD_NORMAL;
     }
 
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    switch (currentState)
+    if (ctx != NULL && ctx->i2cMutex != NULL && xSemaphoreTake(ctx->i2cMutex, pdMS_TO_TICKS(200)) == pdTRUE)
     {
-      case LCD_NORMAL:
-        lcd.print("STATUS:NORMAL ");
-        break;
-      case LCD_WARNING:
-        lcd.print("STATUS:WARNING");
-        break;
-      case LCD_CRITICAL:
-        lcd.print("STATUS:CRITICAL");
-        break;
-    }
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      switch (currentState)
+      {
+        case LCD_NORMAL:
+          lcd.print("STATUS:NORMAL ");
+          break;
+        case LCD_WARNING:
+          lcd.print("STATUS:WARNING");
+          break;
+        case LCD_CRITICAL:
+          lcd.print("STATUS:CRITICAL");
+          break;
+      }
 
-    lcd.setCursor(0, 1);
-    lcd.print("T:");
-    lcd.print(latestData.temperature, 1);
-    lcd.print(" H:");
-    lcd.print(latestData.humidity, 0);
-    lcd.print("%   ");
+      lcd.setCursor(0, 1);
+      lcd.print("T:");
+      lcd.print(latestData.temperature, 1);
+      lcd.print(" H:");
+      lcd.print(latestData.humidity, 0);
+      lcd.print("%   ");
+      xSemaphoreGive(ctx->i2cMutex);
+    }
 
     vTaskDelay(pdMS_TO_TICKS(500));
   }
