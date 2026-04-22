@@ -2,14 +2,16 @@
 
 #include <ArduinoHttpClient.h>
 #include <WiFi.h>
+#include <new>
 
 #include "TinyML_MNIST.h"
 #include "global.h"
 
 #include <TensorFlowLite_ESP32.h>
-#include "tensorflow/lite/micro/all_ops_resolver.h"
+#include "esp_heap_caps.h"
 #include "tensorflow/lite/micro/micro_error_reporter.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
+#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 
 namespace
@@ -19,17 +21,19 @@ namespace
     constexpr int kDigitCanvasSize = 20;
     constexpr size_t kFrameBytes = kCameraFrameSize * kCameraFrameSize;
     constexpr int kMaxPixels = kCameraFrameSize * kCameraFrameSize;
-    constexpr int kTensorArenaSize = 60 * 1024;
+    // The updated CNN-based MNIST model needs substantially more runtime memory
+    // than the previous dense model.
+    constexpr int kTensorArenaSize = 96 * 1024;
     constexpr TickType_t kCameraPollDelay = pdMS_TO_TICKS(2000);
     constexpr TickType_t kRetryDelay = pdMS_TO_TICKS(3000);
 
-    static uint8_t g_frameBuffer[kFrameBytes];
-    static uint8_t g_binaryMask[kMaxPixels];
-    static uint8_t g_selectedMask[kMaxPixels];
-    static uint16_t g_componentQueue[kMaxPixels];
-    static float g_inputCanvas[kMnistImageSize * kMnistImageSize];
-    static uint8_t g_tensorArena[kTensorArenaSize];
-    static tflite::AllOpsResolver g_resolver;
+    static uint8_t *g_frameBuffer = nullptr;
+    static uint8_t *g_binaryMask = nullptr;
+    static uint8_t *g_selectedMask = nullptr;
+    static uint16_t *g_componentQueue = nullptr;
+    static uint8_t *g_inputCanvas = nullptr;
+    static uint8_t *g_tensorArena = nullptr;
+    static tflite::MicroMutableOpResolver<7> g_resolver;
 
     struct DigitBBox
     {
@@ -75,6 +79,62 @@ namespace
             ctx->mnistStatus = status;
             xSemaphoreGive(ctx->stateMutex);
         }
+    }
+
+    void *allocateMnistBuffer(size_t bytes)
+    {
+        void *buffer = heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (buffer != nullptr)
+            return buffer;
+
+        return heap_caps_malloc(bytes, MALLOC_CAP_8BIT);
+    }
+
+    bool ensureMnistBuffers(AppContext *ctx)
+    {
+        if (g_frameBuffer != nullptr &&
+            g_binaryMask != nullptr &&
+            g_selectedMask != nullptr &&
+            g_componentQueue != nullptr &&
+            g_inputCanvas != nullptr &&
+            g_tensorArena != nullptr)
+        {
+            return true;
+        }
+
+        if (g_frameBuffer == nullptr)
+            g_frameBuffer = static_cast<uint8_t *>(allocateMnistBuffer(kFrameBytes));
+        if (g_binaryMask == nullptr)
+            g_binaryMask = g_frameBuffer;
+        if (g_selectedMask == nullptr)
+            g_selectedMask = static_cast<uint8_t *>(allocateMnistBuffer(kMaxPixels));
+        if (g_componentQueue == nullptr)
+            g_componentQueue = static_cast<uint16_t *>(allocateMnistBuffer(kMaxPixels * sizeof(uint16_t)));
+        if (g_inputCanvas == nullptr)
+            g_inputCanvas = static_cast<uint8_t *>(allocateMnistBuffer(kMnistImageSize * kMnistImageSize));
+        if (g_tensorArena == nullptr)
+            g_tensorArena = static_cast<uint8_t *>(allocateMnistBuffer(kTensorArenaSize));
+
+        const bool ready = g_frameBuffer != nullptr &&
+                           g_binaryMask != nullptr &&
+                           g_selectedMask != nullptr &&
+                           g_componentQueue != nullptr &&
+                           g_inputCanvas != nullptr &&
+                           g_tensorArena != nullptr;
+
+        if (!ready)
+        {
+            String status = "Khong du bo nho cho MNIST runtime";
+            status += " (heap=";
+            status += String(ESP.getFreeHeap());
+            status += ", psram=";
+            status += String(ESP.getFreePsram());
+            status += ")";
+            status += ".";
+            setMnistStatus(ctx, false, -1, 0.0f, status);
+        }
+
+        return ready;
     }
 
     void logMnistLine(AppContext *ctx, const String &host, int digit, float confidence)
@@ -248,8 +308,11 @@ namespace
 
     void clearCanvas()
     {
-        for (float &value : g_inputCanvas)
-            value = 0.0f;
+        if (g_inputCanvas == nullptr)
+            return;
+
+        for (int i = 0; i < kMnistImageSize * kMnistImageSize; ++i)
+            g_inputCanvas[i] = 0;
     }
 
     void buildBinaryMask(bool darkDigitOnBrightBg, uint8_t threshold)
@@ -438,7 +501,7 @@ namespace
                 const int canvasY = offsetY + dstY;
                 if (canvasX >= 0 && canvasX < kMnistImageSize && canvasY >= 0 && canvasY < kMnistImageSize)
                 {
-                    g_inputCanvas[canvasY * kMnistImageSize + canvasX] = 1.0f;
+                    g_inputCanvas[canvasY * kMnistImageSize + canvasX] = 255;
                 }
             }
         }
@@ -459,7 +522,7 @@ namespace
             if (input->bytes < pixelCount * sizeof(float))
                 return false;
             for (int i = 0; i < kMnistImageSize * kMnistImageSize; ++i)
-                input->data.f[i] = g_inputCanvas[i];
+                input->data.f[i] = g_inputCanvas[i] > 0 ? 1.0f : 0.0f;
             return true;
         }
 
@@ -468,7 +531,7 @@ namespace
             if (input->bytes < pixelCount)
                 return false;
             for (int i = 0; i < kMnistImageSize * kMnistImageSize; ++i)
-                input->data.uint8[i] = static_cast<uint8_t>(g_inputCanvas[i] * 255.0f);
+                input->data.uint8[i] = g_inputCanvas[i];
             return true;
         }
 
@@ -484,7 +547,7 @@ namespace
 
             for (int i = 0; i < kMnistImageSize * kMnistImageSize; ++i)
             {
-                const float normalized = g_inputCanvas[i];
+                const float normalized = g_inputCanvas[i] > 0 ? 1.0f : 0.0f;
                 int quantized = static_cast<int>(roundf(normalized / scale)) + zeroPoint;
                 if (quantized < -128)
                     quantized = -128;
@@ -538,10 +601,20 @@ void camera_mnist_task(void *pvParameters)
 {
     AppContext *ctx = static_cast<AppContext *>(pvParameters);
 
-    tflite::MicroErrorReporter microErrorReporter;
-    tflite::ErrorReporter *errorReporter = &microErrorReporter;
+    static bool resolverReady = false;
+    if (!resolverReady)
+    {
+        g_resolver.AddConv2D();
+        g_resolver.AddMul();
+        g_resolver.AddAdd();
+        g_resolver.AddMaxPool2D();
+        g_resolver.AddReshape();
+        g_resolver.AddFullyConnected();
+        g_resolver.AddSoftmax();
+        resolverReady = true;
+    }
+
     const tflite::Model *mnistModel = tflite::GetModel(model);
-    tflite::MicroInterpreter interpreter(mnistModel, g_resolver, g_tensorArena, kTensorArenaSize, errorReporter);
 
     if (mnistModel->version() != TFLITE_SCHEMA_VERSION)
     {
@@ -550,23 +623,14 @@ void camera_mnist_task(void *pvParameters)
         return;
     }
 
-    if (interpreter.AllocateTensors() != kTfLiteOk)
-    {
-        setMnistStatus(ctx, false, -1, 0.0f, "MNIST AllocateTensors failed.");
-        vTaskDelete(NULL);
-        return;
-    }
-
-    TfLiteTensor *input = interpreter.input(0);
-    TfLiteTensor *output = interpreter.output(0);
-    if (input == nullptr || output == nullptr)
-    {
-        setMnistStatus(ctx, false, -1, 0.0f, "MNIST tensor binding failed.");
-        vTaskDelete(NULL);
-        return;
-    }
-
     setMnistStatus(ctx, false, -1, 0.0f, "Waiting for camera host.");
+
+    tflite::MicroErrorReporter microErrorReporter;
+    tflite::ErrorReporter *errorReporter = &microErrorReporter;
+    tflite::MicroInterpreter *interpreter = nullptr;
+    TfLiteTensor *input = nullptr;
+    TfLiteTensor *output = nullptr;
+    bool interpreterReady = false;
 
     while (1)
     {
@@ -583,6 +647,45 @@ void camera_mnist_task(void *pvParameters)
             setMnistStatus(ctx, false, -1, 0.0f, "Set camera host from dashboard first.");
             vTaskDelay(kRetryDelay);
             continue;
+        }
+
+        if (!interpreterReady)
+        {
+            if (!ensureMnistBuffers(ctx))
+            {
+                vTaskDelay(kRetryDelay);
+                continue;
+            }
+
+            interpreter = new tflite::MicroInterpreter(mnistModel, g_resolver, g_tensorArena, kTensorArenaSize, errorReporter);
+            if (interpreter == nullptr)
+            {
+                setMnistStatus(ctx, false, -1, 0.0f, "MNIST interpreter creation failed.");
+                vTaskDelay(kRetryDelay);
+                continue;
+            }
+
+            if (interpreter->AllocateTensors() != kTfLiteOk)
+            {
+                setMnistStatus(ctx, false, -1, 0.0f, "MNIST AllocateTensors failed.");
+                delete interpreter;
+                interpreter = nullptr;
+                vTaskDelay(kRetryDelay);
+                continue;
+            }
+
+            input = interpreter->input(0);
+            output = interpreter->output(0);
+            if (input == nullptr || output == nullptr)
+            {
+                setMnistStatus(ctx, false, -1, 0.0f, "MNIST tensor binding failed.");
+                delete interpreter;
+                interpreter = nullptr;
+                vTaskDelay(kRetryDelay);
+                continue;
+            }
+
+            interpreterReady = true;
         }
 
         if (!fetchGrayFrame(host))
@@ -607,7 +710,7 @@ void camera_mnist_task(void *pvParameters)
             return;
         }
 
-        if (interpreter.Invoke() != kTfLiteOk)
+        if (interpreter->Invoke() != kTfLiteOk)
         {
             setMnistStatus(ctx, false, -1, 0.0f, "MNIST inference failed.");
             vTaskDelay(kRetryDelay);

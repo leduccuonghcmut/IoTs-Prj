@@ -294,8 +294,13 @@ bool initEspNow(AppContext *ctx)
 {
     g_ctx = ctx;
 
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.disconnect(false, false);
+    const wifi_mode_t currentMode = WiFi.getMode();
+    if (currentMode != WIFI_AP_STA)
+    {
+        // Keep the existing network session intact whenever possible.
+        // Resetting/disconnecting Wi-Fi here can tear down the dashboard AP/STA.
+        WiFi.mode(WIFI_AP_STA);
+    }
 
     if (esp_now_init() != ESP_OK)
     {

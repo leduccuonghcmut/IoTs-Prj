@@ -25,6 +25,11 @@ struct WifiUiState
   String wifiMessage = "AP mode";
 };
 
+void logWifiLine(const String &message)
+{
+  Serial.println("[WIFI] " + message);
+}
+
 Servo &doorServoDevice()
 {
   static Servo servo;
@@ -417,10 +422,14 @@ void main_server_task(void *pvParameters)
       xSemaphoreGive(ctx->configMutex);
     }
 
-    WiFi.disconnect(false, false);
-    delay(200);
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.softAP(apSsid.c_str(), apPassword.c_str());
+    if (WiFi.getMode() != WIFI_AP_STA)
+      WiFi.mode(WIFI_AP_STA);
+
+    if (WiFi.softAPIP().toString() == "0.0.0.0")
+    {
+      WiFi.softAP(apSsid.c_str(), apPassword.c_str());
+    }
+
     wifiUi.isApMode = true;
     wifiUi.connecting = false;
     wifiUi.connectStartMs = 0;
@@ -431,6 +440,8 @@ void main_server_task(void *pvParameters)
       ctx->wifiConnected = false;
       xSemaphoreGive(ctx->stateMutex);
     }
+
+    logWifiLine("AP started. SSID: " + apSsid + " | AP IP: " + WiFi.softAPIP().toString());
   };
 
   auto beginStation = [&]()
@@ -448,6 +459,7 @@ void main_server_task(void *pvParameters)
     {
       wifiUi.connecting = false;
       wifiUi.wifiMessage = "Chua co SSID de ket noi";
+      logWifiLine("STA skipped because SSID is empty.");
       return;
     }
 
@@ -465,6 +477,7 @@ void main_server_task(void *pvParameters)
     wifiUi.connecting = true;
     wifiUi.connectStartMs = millis();
     wifiUi.wifiMessage = "Dang thu ket noi WiFi";
+    logWifiLine("Trying STA connection to SSID: " + wifiSsid);
   };
 
   pinMode(BOOT_PIN, INPUT_PULLUP);
@@ -864,6 +877,7 @@ void main_server_task(void *pvParameters)
         wifiUi.wifiMessage = "Da ket noi WiFi";
         wifiUi.isApMode = false;
         wifiUi.connecting = false;
+        logWifiLine("STA connected. SSID: " + WiFi.SSID() + " | STA IP: " + WiFi.localIP().toString() + " | AP IP: " + WiFi.softAPIP().toString());
 
         if (ctx != NULL && lockWithTimeout(ctx->stateMutex, portMAX_DELAY))
         {
@@ -878,7 +892,8 @@ void main_server_task(void *pvParameters)
       {
         wifiUi.wifiMessage = "Ket noi timeout, giu AP de cau hinh";
         wifiUi.connecting = false;
-        startApMode();
+        wifiUi.isApMode = true;
+        logWifiLine("STA connection timed out. Keeping AP mode active.");
       }
     }
     else
