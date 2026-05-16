@@ -58,6 +58,18 @@ function setStatusVariant(id, label, variant) {
   element.classList.add(variant);
 }
 
+function toProbability(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, numeric));
+}
+
+function formatProbability(value) {
+  return `${(toProbability(value) * 100).toFixed(1)}%`;
+}
+
 function showSection(sectionId) {
   document.querySelectorAll(".section").forEach((section) => {
     section.style.display = section.id === sectionId ? "block" : "none";
@@ -197,31 +209,60 @@ function applyRemoteState(data) {
 
 function applyTinyMlState(data) {
   const ready = data.tinyml_ready === true || String(data.tinyml_ready).toLowerCase() === "true";
-  const score = Number.isFinite(Number(data.tinyml_score)) ? Number(data.tinyml_score) : 0;
+  const score = toProbability(data.tinyml_score);
+  const probabilityNormal = toProbability(data.tinyml_prob_normal);
+  const probabilityThreshold = toProbability(data.tinyml_prob_threshold);
+  const probabilitySpike = toProbability(data.tinyml_prob_spike);
   const state = String(data.tinyml_state || (ready ? "NORMAL" : "IDLE")).toUpperCase();
-  const description = data.tinyml_desc || "TinyML dang cho du lieu cam bien.";
-  let severityText = "Dang doi du lieu";
+  const description = data.tinyml_desc || "TinyML is waiting for sensor data.";
+  const maxProbability = Math.max(probabilityNormal, probabilityThreshold, probabilitySpike, score);
+  let severityText = "Waiting for data";
   let meterClass = "tinyml-normal";
+  let badgeText = "IDLE";
 
   if (!ready || state === "IDLE") {
-    setStatusVariant("tinymlBadge", "IDLE", "tinyml-idle");
+    badgeText = "IDLE";
+    setStatusVariant("tinymlBadge", badgeText, "tinyml-idle");
     meterClass = "tinyml-idle";
   } else if (state === "ANOMALY") {
-    setStatusVariant("tinymlBadge", "ANOMALY", "tinyml-anomaly");
-    severityText = "Bat thuong cao";
+    badgeText = "SPIKE";
+    setStatusVariant("tinymlBadge", badgeText, "tinyml-anomaly");
+    severityText = "Sudden spike";
     meterClass = "tinyml-anomaly";
   } else if (state === "WARNING") {
-    setStatusVariant("tinymlBadge", "WARNING", "tinyml-warning");
-    severityText = "Can theo doi";
+    badgeText = "THRESHOLD";
+    setStatusVariant("tinymlBadge", badgeText, "tinyml-warning");
+    severityText = "Sustained threshold";
     meterClass = "tinyml-warning";
   } else {
-    setStatusVariant("tinymlBadge", "NORMAL", "tinyml-normal");
-    severityText = "Trong vung an toan";
+    badgeText = "NORMAL";
+    setStatusVariant("tinymlBadge", badgeText, "tinyml-normal");
+    severityText = "In safe range";
   }
 
   setText("tinymlScore", ready ? score.toFixed(4) : "--");
+  setText("tinymlTopConfidence", ready ? `${formatProbability(maxProbability)}` : "--");
   setText("tinymlDesc", description);
   setText("tinymlSeverityText", severityText);
+
+  const normalBar = document.getElementById("tinymlProbNormalBar");
+  if (normalBar) {
+    normalBar.style.width = ready ? `${probabilityNormal * 100}%` : "0%";
+  }
+
+  const thresholdBar = document.getElementById("tinymlProbThresholdBar");
+  if (thresholdBar) {
+    thresholdBar.style.width = ready ? `${probabilityThreshold * 100}%` : "0%";
+  }
+
+  const spikeBar = document.getElementById("tinymlProbSpikeBar");
+  if (spikeBar) {
+    spikeBar.style.width = ready ? `${probabilitySpike * 100}%` : "0%";
+  }
+
+  setText("tinymlProbNormalValue", ready ? formatProbability(probabilityNormal) : "--");
+  setText("tinymlProbThresholdValue", ready ? formatProbability(probabilityThreshold) : "--");
+  setText("tinymlProbSpikeValue", ready ? formatProbability(probabilitySpike) : "--");
 
   const meter = document.getElementById("tinymlMeterFill");
   if (meter) {
@@ -241,7 +282,7 @@ function applyMnistState(data) {
   const ready = data.mnist_ready === true || String(data.mnist_ready).toLowerCase() === "true";
   const digit = Number.isFinite(Number(data.mnist_digit)) && Number(data.mnist_digit) >= 0 ? Number(data.mnist_digit) : null;
   const confidence = Number.isFinite(Number(data.mnist_confidence)) ? Number(data.mnist_confidence) : 0;
-  const status = data.mnist_status || "ESP32 dang cho cau hinh camera.";
+  const status = data.mnist_status || "The ESP32 is waiting for camera configuration.";
   const source = data.camera_host || "--";
 
   if (ready) {
@@ -270,13 +311,13 @@ async function loadSensors() {
     const data = await fetchJson("/sensors");
     setText("temp", Number.isFinite(Number(data.temp)) ? `${Number(data.temp).toFixed(1)}°` : "--");
     setText("hum", Number.isFinite(Number(data.hum)) ? `${Number(data.hum).toFixed(1)}%` : "--");
-    setText("wifiStatus", "Dang hoat dong");
+    setText("wifiStatus", "Running");
     applyUnifiedState(data);
   } catch (error) {
-    console.error("Khong lay duoc du lieu cam bien:", error);
+    console.error("Failed to fetch sensor data:", error);
     setText("temp", "--");
     setText("hum", "--");
-    setText("wifiStatus", "Mat ket noi");
+    setText("wifiStatus", "Disconnected");
   }
 }
 
@@ -285,7 +326,7 @@ async function loadDeviceState() {
     const data = await fetchJson("/state");
     applyUnifiedState(data);
   } catch (error) {
-    console.error("Khong lay duoc trang thai thiet bi:", error);
+    console.error("Failed to fetch device state:", error);
   }
 }
 
@@ -295,7 +336,7 @@ async function controlDoor(state) {
     await loadDeviceState();
   } catch (error) {
     console.error("Door control error:", error);
-    alert("Loi dieu khien cua");
+    alert("Door control failed");
   }
 }
 
@@ -305,7 +346,7 @@ async function setFan(state) {
     await loadDeviceState();
   } catch (error) {
     console.error("Fan control error:", error);
-    alert("Khong dieu khien duoc quat");
+    alert("Unable to control the fan");
   }
 }
 
@@ -315,7 +356,7 @@ async function setFanSpeed(value) {
     await loadDeviceState();
   } catch (error) {
     console.error("Fan speed error:", error);
-    alert("Khong chinh duoc toc do quat");
+    alert("Unable to adjust fan speed");
   }
 }
 
@@ -330,7 +371,7 @@ async function applyRgbColor() {
     await loadDeviceState();
   } catch (error) {
     console.error("RGB control error:", error);
-    alert("Khong dieu khien duoc NeoPixel ngoai vi");
+    alert("Unable to control the peripheral NeoPixel");
   }
 }
 
@@ -342,7 +383,7 @@ async function turnOffRgb() {
     await loadDeviceState();
   } catch (error) {
     console.error("RGB off error:", error);
-    alert("Khong tat duoc NeoPixel ngoai vi");
+    alert("Unable to turn off the peripheral NeoPixel");
   }
 }
 
@@ -353,7 +394,7 @@ async function controlRemoteDoor(state) {
     setTimeout(loadDeviceState, 1200);
   } catch (error) {
     console.error("Remote door error:", error);
-    alert("Khong gui duoc lenh cua toi board giao tiep");
+    alert("Unable to send the door command to the peer board");
   }
 }
 
@@ -364,7 +405,7 @@ async function setRemoteFan(state) {
     setTimeout(loadDeviceState, 1200);
   } catch (error) {
     console.error("Remote fan error:", error);
-    alert("Khong gui duoc lenh quat toi board giao tiep");
+    alert("Unable to send the fan command to the peer board");
   }
 }
 
@@ -375,7 +416,7 @@ async function setRemoteFanSpeed(value) {
     setTimeout(loadDeviceState, 1200);
   } catch (error) {
     console.error("Remote fan speed error:", error);
-    alert("Khong chinh duoc toc do quat remote");
+    alert("Unable to adjust the remote fan speed");
   }
 }
 
@@ -391,7 +432,7 @@ async function applyRemoteRgbColor() {
     setTimeout(loadDeviceState, 1200);
   } catch (error) {
     console.error("Remote RGB control error:", error);
-    alert("Khong gui duoc mau RGB toi board giao tiep");
+    alert("Unable to send the RGB color to the peer board");
   }
 }
 
@@ -404,7 +445,7 @@ async function turnOffRemoteRgb() {
     setTimeout(loadDeviceState, 1200);
   } catch (error) {
     console.error("Remote RGB off error:", error);
-    alert("Khong tat duoc RGB cua board giao tiep");
+    alert("Unable to turn off the peer board RGB");
   }
 }
 
@@ -418,31 +459,31 @@ async function connectWifi(event) {
   const submitButton = document.querySelector('#settingsForm button[type="submit"]');
 
   if (!ssid) {
-    alert("Vui long nhap SSID");
+    alert("Please enter the SSID");
     return;
   }
 
   try {
     if (submitButton) {
       submitButton.disabled = true;
-      submitButton.textContent = "Dang ket noi...";
+      submitButton.textContent = "Connecting...";
     }
 
     const data = await fetchJson(`/connect?ssid=${encodeURIComponent(ssid)}&pass=${encodeURIComponent(password)}`);
     if (data.ok !== true) {
-      throw new Error(data.error || "Phan hoi khong hop le");
+      throw new Error(data.error || "Invalid response");
     }
 
-    setText("wifiStatus", "Dang ket noi WiFi...");
+    setText("wifiStatus", "Connecting WiFi...");
     waitForWifiConnection();
   } catch (error) {
-    console.error("Ket noi WiFi loi:", error);
-    setText("wifiStatus", "Gui cau hinh that bai");
-    alert("Khong gui duoc cau hinh WiFi");
+    console.error("WiFi connection error:", error);
+    setText("wifiStatus", "Configuration failed");
+    alert("Unable to send WiFi configuration");
   } finally {
     if (submitButton) {
       submitButton.disabled = false;
-      submitButton.textContent = "Ket noi WiFi";
+      submitButton.textContent = "Connect WiFi";
     }
   }
 }
@@ -453,13 +494,13 @@ async function waitForWifiConnection() {
       const data = await fetchJson("/wifi_status");
 
       if (data.connecting) {
-        setText("wifiStatus", "Dang ket noi WiFi...");
+        setText("wifiStatus", "Connecting WiFi...");
       }
 
       if (data.connected) {
-        setText("wifiStatus", `Da ket noi: ${data.ssid || ""}`);
+        setText("wifiStatus", `Connected: ${data.ssid || ""}`);
         if (data.sta_ip) {
-          alert(`Ket noi WiFi thanh cong\nIP moi cua thiet bi: ${data.sta_ip}`);
+          alert(`WiFi connected successfully\nDevice IP: ${data.sta_ip}`);
         }
         return;
       }
@@ -474,8 +515,8 @@ async function waitForWifiConnection() {
     await new Promise((resolve) => setTimeout(resolve, 1500));
   }
 
-  setText("wifiStatus", "Ket noi WiFi that bai hoac timeout");
-  alert("Thiet bi chua ket noi duoc WiFi. Hay kiem tra SSID va mat khau.");
+  setText("wifiStatus", "WiFi connection failed or timed out");
+  alert("The device could not connect to WiFi. Check the SSID and password.");
 }
 
 async function loadWifiStatus() {
@@ -484,9 +525,9 @@ async function loadWifiStatus() {
     if (data.connected) {
       setText("wifiStatus", `WiFi: ${data.ssid || "STA"} | IP: ${data.sta_ip || "--"}`);
     } else if (data.connecting) {
-      setText("wifiStatus", `Dang ket noi WiFi ${data.ssid ? `(${data.ssid})` : ""}...`);
+      setText("wifiStatus", `Connecting WiFi ${data.ssid ? `(${data.ssid})` : ""}...`);
     } else {
-      setText("wifiStatus", data.message || "Chua ket noi");
+      setText("wifiStatus", data.message || "Not connected");
     }
 
     const ssidInput = document.getElementById("ssid");
@@ -494,7 +535,7 @@ async function loadWifiStatus() {
       ssidInput.value = data.ssid;
     }
   } catch (error) {
-    console.error("Khong lay duoc trang thai WiFi:", error);
+    console.error("Failed to fetch WiFi status:", error);
   }
 }
 
@@ -508,7 +549,7 @@ async function scanWifi() {
 
     list.innerHTML = "";
     if (!Array.isArray(data) || data.length === 0) {
-      list.innerHTML = `<div class="wifi-item"><strong>Khong tim thay mang WiFi</strong><span>Thu quet lai</span></div>`;
+      list.innerHTML = `<div class="wifi-item"><strong>No WiFi networks found</strong><span>Try scanning again</span></div>`;
       return;
     }
 
@@ -531,10 +572,10 @@ async function scanWifi() {
       list.appendChild(item);
     });
   } catch (error) {
-    console.error("Scan WiFi loi:", error);
+    console.error("WiFi scan error:", error);
     const list = document.getElementById("wifiList");
     if (list) {
-      list.innerHTML = `<div class="wifi-item"><strong>Khong quet duoc WiFi</strong><span>Kiem tra lai ket noi</span></div>`;
+      list.innerHTML = `<div class="wifi-item"><strong>Unable to scan WiFi</strong><span>Check the connection again</span></div>`;
     }
   }
 }
@@ -548,7 +589,7 @@ async function loadCameraConfig() {
     }
     applyMnistState(data);
   } catch (error) {
-    console.error("Khong lay duoc cau hinh camera:", error);
+    console.error("Failed to fetch camera configuration:", error);
   }
 }
 
@@ -556,19 +597,19 @@ async function savePcIp() {
   const input = document.getElementById("pcIpInput");
   const ip = input ? input.value.trim() : "";
   if (!ip) {
-    alert("Vui long nhap IP PC");
+    alert("Please enter the PC IP");
     return false;
   }
 
   try {
     const data = await fetchJson(`/camera_config?host=${encodeURIComponent(ip)}`);
     localStorage.setItem("pc_ip", ip);
-    setText("camStatus", `ESP32 da luu host: ${ip}`);
+    setText("camStatus", `ESP32 saved host: ${ip}`);
     applyMnistState(data);
     return true;
   } catch (error) {
-    console.error("Khong luu duoc camera host:", error);
-    alert("Khong gui duoc camera host toi ESP32");
+    console.error("Failed to save camera host:", error);
+    alert("Unable to send the camera host to the ESP32");
     return false;
   }
 }
@@ -582,8 +623,8 @@ async function savePeerMac() {
     applyRemoteState(data);
     return true;
   } catch (error) {
-    console.error("Khong luu duoc peer MAC:", error);
-    alert("Khong gui duoc peer MAC toi firmware");
+    console.error("Failed to save peer MAC:", error);
+    alert("Unable to send the peer MAC to the firmware");
     return false;
   }
 }
@@ -592,7 +633,7 @@ async function connectCamera() {
   const ip = getCameraHost();
 
   if (!ip) {
-    alert("Chua co IP PC");
+    alert("No PC IP configured");
     return;
   }
 
@@ -606,13 +647,13 @@ async function connectCamera() {
     image.src = `${getCameraBaseUrl()}/video_feed?t=${Date.now()}`;
   }
 
-  setText("camStatus", `Dang ket noi stream: http://${ip}/video_feed`);
+  setText("camStatus", `Connecting stream: http://${ip}/video_feed`);
 }
 
 async function setCameraSource(sourceName) {
   const baseUrl = getCameraBaseUrl();
   if (!baseUrl) {
-    alert("Chua co IP PC");
+    alert("No PC IP configured");
     return false;
   }
 
@@ -644,10 +685,10 @@ async function useCameraSource() {
 
     await setCameraSource("camera");
     await connectCamera();
-    setText("camStatus", `Dang dung webcam live: ${getCameraBaseUrl()}/video_feed`);
+    setText("camStatus", `Using live webcam: ${getCameraBaseUrl()}/video_feed`);
   } catch (error) {
-    console.error("Khong chuyen duoc sang webcam:", error);
-    alert("Khong chuyen duoc sang nguon webcam");
+    console.error("Failed to switch to webcam:", error);
+    alert("Unable to switch to the webcam source");
   }
 }
 
@@ -657,12 +698,12 @@ async function uploadTestImage() {
   const file = input?.files?.[0];
 
   if (!baseUrl) {
-    alert("Chua co IP PC");
+    alert("No PC IP configured");
     return;
   }
 
   if (!file) {
-    alert("Hay chon mot file anh");
+    alert("Please choose an image file");
     return;
   }
 
@@ -688,17 +729,17 @@ async function uploadTestImage() {
 
     await refreshCapturedPreview();
 
-    setText("camStatus", `Da tai anh test: ${file.name}`);
+    setText("camStatus", `Uploaded test image: ${file.name}`);
   } catch (error) {
-    console.error("Khong tai duoc anh test:", error);
-    alert(`Khong tai duoc anh test len camera server\n${error.message || ""}`.trim());
+    console.error("Failed to upload test image:", error);
+    alert(`Unable to upload the test image to the camera server\n${error.message || ""}`.trim());
   }
 }
 
 async function captureCurrentFrame() {
   const baseUrl = getCameraBaseUrl();
   if (!baseUrl) {
-    alert("Chua co IP PC");
+    alert("No PC IP configured");
     return;
   }
 
@@ -719,10 +760,10 @@ async function captureCurrentFrame() {
     }
 
     await refreshCapturedPreview();
-    setText("camStatus", "Da chup khung webcam hien tai de detect");
+    setText("camStatus", "Captured the current webcam frame for detection");
   } catch (error) {
-    console.error("Khong chup duoc frame webcam:", error);
-    alert(`Khong chup duoc khung hien tai\n${error.message || ""}`.trim());
+    console.error("Failed to capture webcam frame:", error);
+    alert(`Unable to capture the current frame\n${error.message || ""}`.trim());
   }
 }
 
@@ -731,7 +772,7 @@ function disconnectCamera() {
   if (image) {
     image.src = "";
   }
-  setText("camStatus", "Da ngat camera stream");
+  setText("camStatus", "Camera stream disconnected");
 }
 
 function bindEvents() {

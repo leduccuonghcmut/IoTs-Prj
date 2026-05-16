@@ -118,14 +118,14 @@ const char *tinyMLStateDescription(TinyMLState state)
   switch (state)
   {
     case TINYML_NORMAL:
-      return "Du lieu hien tai nam trong vung an toan.";
+      return "Normal: data is within the safe range.";
     case TINYML_WARNING:
-      return "Moi truong dang co dau hieu lech khoi mau binh thuong.";
+      return "Threshold: data has stayed above the limit for an extended period.";
     case TINYML_ANOMALY:
-      return "Model phat hien bat thuong ro rang, can kiem tra ngay.";
+      return "Spike: data changed suddenly compared to the previous reading.";
     case TINYML_IDLE:
     default:
-      return "TinyML dang cho du lieu cam bien.";
+      return "TinyML is waiting for sensor data.";
   }
 }
 
@@ -168,6 +168,9 @@ String buildUnifiedStateJson(AppContext *ctx)
   float temperature = 0.0f;
   float humidity = 0.0f;
   float tinymlScore = 0.0f;
+  float tinymlProbNormal = 0.0f;
+  float tinymlProbThreshold = 0.0f;
+  float tinymlProbSpike = 0.0f;
   float mnistConfidence = 0.0f;
   float remoteTemperature = 0.0f;
   float remoteHumidity = 0.0f;
@@ -211,6 +214,9 @@ String buildUnifiedStateJson(AppContext *ctx)
     temperature = ctx->temperature;
     humidity = ctx->humidity;
     tinymlScore = ctx->tinymlScore;
+    tinymlProbNormal = ctx->tinymlProbNormal;
+    tinymlProbThreshold = ctx->tinymlProbThreshold;
+    tinymlProbSpike = ctx->tinymlProbSpike;
     mnistConfidence = ctx->mnistConfidence;
     remoteTemperature = ctx->remoteTemperature;
     remoteHumidity = ctx->remoteHumidity;
@@ -264,6 +270,9 @@ String buildUnifiedStateJson(AppContext *ctx)
   json += "\"hum\":" + String(humidity, 1) + ",";
   json += "\"tinyml_ready\":" + boolToJson(tinymlReady) + ",";
   json += "\"tinyml_score\":" + String(tinymlScore, 6) + ",";
+  json += "\"tinyml_prob_normal\":" + String(tinymlProbNormal, 6) + ",";
+  json += "\"tinyml_prob_threshold\":" + String(tinymlProbThreshold, 6) + ",";
+  json += "\"tinyml_prob_spike\":" + String(tinymlProbSpike, 6) + ",";
   json += "\"tinyml_state\":\"" + String(tinyMLStateToString(tinymlState)) + "\",";
   json += "\"tinyml_desc\":\"" + String(tinyMLStateDescription(tinymlState)) + "\",";
   json += "\"camera_host\":\"" + cameraHost + "\",";
@@ -465,7 +474,7 @@ void main_server_task(void *pvParameters)
     if (wifiSsid.isEmpty())
     {
       wifiUi.connecting = false;
-      wifiUi.wifiMessage = "Chua co SSID de ket noi";
+      wifiUi.wifiMessage = "No SSID configured for connection";
       logWifiLine("STA skipped because SSID is empty.");
       return;
     }
@@ -483,7 +492,7 @@ void main_server_task(void *pvParameters)
 
     wifiUi.connecting = true;
     wifiUi.connectStartMs = millis();
-    wifiUi.wifiMessage = "Dang thu ket noi WiFi";
+    wifiUi.wifiMessage = "Trying to connect to WiFi";
     logWifiLine("Trying STA connection to SSID: " + wifiSsid);
   };
 
@@ -881,7 +890,7 @@ void main_server_task(void *pvParameters)
       const wl_status_t status = WiFi.status();
       if (status == WL_CONNECTED)
       {
-        wifiUi.wifiMessage = "Da ket noi WiFi";
+        wifiUi.wifiMessage = "WiFi connected";
         wifiUi.isApMode = false;
         wifiUi.connecting = false;
         logWifiLine("STA connected. SSID: " + WiFi.SSID() + " | STA IP: " + WiFi.localIP().toString() + " | AP IP: " + WiFi.softAPIP().toString());
@@ -897,7 +906,7 @@ void main_server_task(void *pvParameters)
       }
       else if (millis() - wifiUi.connectStartMs > 15000)
       {
-        wifiUi.wifiMessage = "Ket noi timeout, giu AP de cau hinh";
+        wifiUi.wifiMessage = "Connection timed out, keeping AP for configuration";
         wifiUi.connecting = false;
         wifiUi.isApMode = true;
         logWifiLine("STA connection timed out. Keeping AP mode active.");

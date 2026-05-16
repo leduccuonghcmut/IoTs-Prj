@@ -90,6 +90,9 @@ typedef struct
     float temperature;
     float humidity;
     float tinymlScore;
+    float tinymlProbNormal;
+    float tinymlProbThreshold;
+    float tinymlProbSpike;
     float mnistConfidence;
     float remoteTemperature;
     float remoteHumidity;

@@ -1185,6 +1185,87 @@ button:hover {
   line-height: 1.65;
 }
 
+.tinyml-prob-card {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tinyml-prob-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  color: #d8e4f8;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.tinyml-prob-head strong {
+  color: #ffffff;
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.tinyml-prob-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.tinyml-prob-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 64px;
+  gap: 12px;
+  align-items: center;
+  color: #eef4ff;
+  font-size: 13px;
+}
+
+.tinyml-prob-row span {
+  color: #dbe5f8;
+  font-weight: 700;
+}
+
+.tinyml-prob-row strong {
+  text-align: right;
+  font-size: 13px;
+  color: #ffffff;
+}
+
+.tinyml-prob-track {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tinyml-prob-fill {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  transition: width 0.28s ease;
+}
+
+.tinyml-prob-normal {
+  background: linear-gradient(90deg, rgba(25, 211, 138, 0.7), rgba(55, 240, 177, 0.95));
+}
+
+.tinyml-prob-threshold {
+  background: linear-gradient(90deg, rgba(255, 204, 102, 0.7), rgba(255, 184, 77, 0.95));
+}
+
+.tinyml-prob-spike {
+  background: linear-gradient(90deg, rgba(255, 91, 127, 0.7), rgba(255, 65, 108, 0.95));
+}
+
 @media (max-width: 920px) {
   .tinyml-grid,
   .camera-mnist-grid {
@@ -1197,5 +1278,14 @@ button:hover {
 
   .camera-digit-value {
     font-size: 64px;
+  }
+
+  .tinyml-prob-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .tinyml-prob-row strong {
+    text-align: left;
   }
 }

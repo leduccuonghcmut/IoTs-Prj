@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 
 <head>
   <meta charset="UTF-8" />
@@ -27,7 +27,7 @@
         <nav class="nav-menu">
           <button class="nav-item active" data-section="dashboard">
             <span>Home</span>
-            <span>Tong quan</span>
+            <span>Overview</span>
           </button>
           <button class="nav-item" data-section="device">
             <span>Local</span>
@@ -39,11 +39,11 @@
           </button>
           <button class="nav-item" data-section="info">
             <span>Info</span>
-            <span>Thong tin</span>
+            <span>Info</span>
           </button>
           <button class="nav-item" data-section="settings">
             <span>WiFi</span>
-            <span>Cau hinh</span>
+            <span>Settings</span>
           </button>
           <button class="nav-item" data-section="camera">
             <span>Cam</span>
@@ -55,7 +55,7 @@
       <div class="sidebar-footer">
         <div class="status-pill">
           <span class="dot"></span>
-          <span id="wifiStatus">Dang hoat dong</span>
+          <span id="wifiStatus">Running</span>
         </div>
       </div>
     </aside>
@@ -65,12 +65,12 @@
         <div class="hero glass">
           <div>
             <p class="eyebrow">ESP32 ACCESS POINT MODE</p>
-            <h1>He thong giam sat va dieu khien thong minh</h1>
+            <h1>Smart monitoring and control system</h1>
             <p class="hero-text">
-              Theo doi nhiet do, do am, TinyML va trang thai thiet bi trong thoi gian thuc.
+              Monitor temperature, humidity, TinyML, and device state in real time.
             </p>
           </div>
-          <button class="refresh-btn" id="refreshButton">Lam moi du lieu</button>
+          <button class="refresh-btn" id="refreshButton">Refresh data</button>
         </div>
 
         <div class="sensor-grid">
@@ -78,24 +78,24 @@
             <div class="sensor-card-top">
               <div class="sensor-icon-wrap">T</div>
               <div>
-                <p class="card-label">Nhiet do</p>
+                <p class="card-label">Temperature</p>
                 <h3>Environment Temperature</h3>
               </div>
             </div>
             <div id="temp" class="sensor-value">--</div>
-            <div class="sensor-meta">Don vi do: degC</div>
+            <div class="sensor-meta">Unit: &deg;C</div>
           </div>
 
           <div class="card sensor-card hum-card glass">
             <div class="sensor-card-top">
               <div class="sensor-icon-wrap">H</div>
               <div>
-                <p class="card-label">Do am</p>
+                <p class="card-label">Humidity</p>
                 <h3>Environment Humidity</h3>
               </div>
             </div>
             <div id="hum" class="sensor-value">--</div>
-            <div class="sensor-meta">Don vi do: %</div>
+            <div class="sensor-meta">Unit: %</div>
           </div>
         </div>
 
@@ -112,11 +112,11 @@
             <div class="tinyml-score-card">
               <div class="tinyml-score-ring">
                 <div id="tinymlScore" class="tinyml-score">--</div>
-                <span class="tinyml-score-unit">score</span>
+                <span class="tinyml-score-unit">confidence</span>
               </div>
               <div class="tinyml-score-meta">
-                <div class="sensor-meta">Model anomaly score</div>
-                <strong id="tinymlSeverityText" class="tinyml-severity-text">Dang doi du lieu</strong>
+                <div class="sensor-meta">Model confidence</div>
+                <strong id="tinymlSeverityText" class="tinyml-severity-text">Waiting for sensor data</strong>
               </div>
             </div>
 
@@ -138,11 +138,42 @@
                 <span>1.00</span>
               </div>
               <div class="tinyml-thresholds">
-                <span>An toan: 0.00 - 0.49</span>
-                <span>Can chu y: 0.50 - 0.79</span>
-                <span>Bat thuong: 0.80 - 1.00</span>
+                <span>Safe: 0.00 - 0.49</span>
+                <span>Watch: 0.50 - 0.79</span>
+                <span>Spike: 0.80 - 1.00</span>
               </div>
-              <p id="tinymlDesc" class="tinyml-desc">TinyML dang cho du lieu cam bien.</p>
+              <p id="tinymlDesc" class="tinyml-desc">TinyML is waiting for sensor data.</p>
+
+              <div class="tinyml-prob-card">
+                <div class="tinyml-prob-head">
+                  <span>Three-class probability</span>
+                  <strong id="tinymlTopConfidence">--</strong>
+                </div>
+
+                <div class="tinyml-prob-list">
+                  <div class="tinyml-prob-row">
+                    <span>Normal</span>
+                    <div class="tinyml-prob-track">
+                      <div id="tinymlProbNormalBar" class="tinyml-prob-fill tinyml-prob-normal"></div>
+                    </div>
+                    <strong id="tinymlProbNormalValue">--</strong>
+                  </div>
+                  <div class="tinyml-prob-row">
+                    <span>Threshold</span>
+                    <div class="tinyml-prob-track">
+                      <div id="tinymlProbThresholdBar" class="tinyml-prob-fill tinyml-prob-threshold"></div>
+                    </div>
+                    <strong id="tinymlProbThresholdValue">--</strong>
+                  </div>
+                  <div class="tinyml-prob-row">
+                    <span>Spike</span>
+                    <div class="tinyml-prob-track">
+                      <div id="tinymlProbSpikeBar" class="tinyml-prob-fill tinyml-prob-spike"></div>
+                    </div>
+                    <strong id="tinymlProbSpikeValue">--</strong>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -156,29 +187,29 @@
               </div>
               <div id="rgbOverviewBadge" class="device-badge off">OFF</div>
             </div>
-            <p class="quick-desc">Theo doi nhanh trang thai den RGB ngoai vi dang duoc dieu khien tu web.</p>
+            <p class="quick-desc">Quickly view the state of the peripheral RGB LED controlled from the web.</p>
           </div>
 
           <div class="card quick-card glass">
             <div class="quick-top">
               <div>
-                <p class="card-label">Cua</p>
+                <p class="card-label">Door</p>
                 <h3>Door State</h3>
               </div>
               <div id="doorOverviewBadge" class="device-badge off">--</div>
             </div>
-            <p class="quick-desc">Theo doi nhanh trang thai dong mo cua.</p>
+            <p class="quick-desc">Quickly view the door open/closed state.</p>
           </div>
 
           <div class="card quick-card glass">
             <div class="quick-top">
               <div>
-                <p class="card-label">Quat</p>
+                <p class="card-label">Fan</p>
                 <h3>Fan State</h3>
               </div>
               <div id="fanOverviewBadge" class="device-badge off">OFF</div>
             </div>
-            <p class="quick-desc">Theo doi fan va toc do hien tai ngay tren tong quan.</p>
+            <p class="quick-desc">Track the fan and its current speed from the overview panel.</p>
           </div>
         </div>
       </section>
@@ -188,7 +219,7 @@
           <div>
             <p class="eyebrow">DEVICE CONTROL</p>
             <h1>Current Board Control</h1>
-            <p class="subtext">Quan ly NeoPixel ngoai vi, cua va quat tren board hien tai.</p>
+            <p class="subtext">Manage the peripheral NeoPixel, door, and fan on the current board.</p>
           </div>
         </div>
 
@@ -197,31 +228,31 @@
             <div class="device-top">
               <div class="device-icon lamp">RGB</div>
               <div>
-                <h3>NeoPixel ngoai vi</h3>
-                <p>Dieu khien tay qua web cho LED gan ngoai o chan RGB</p>
+                <h3>Peripheral NeoPixel</h3>
+                <p>Manual web control for the RGB LED connected to the RGB header</p>
               </div>
             </div>
 
             <div class="device-status-row">
-              <span>Trang thai</span>
+              <span>Status</span>
               <span id="rgbState" class="status-badge off">OFF</span>
             </div>
 
             <div class="rgb-picker-wrap">
-              <label class="rgb-label" for="rgbPicker">Mau LED</label>
+              <label class="rgb-label" for="rgbPicker">LED color</label>
               <div class="rgb-picker-row">
                 <input id="rgbPicker" type="color" value="#000000" />
                 <div id="rgbPreview" class="rgb-preview"></div>
               </div>
               <div class="rgb-hex-row">
-                <span>Ma mau</span>
+                <span>Color code</span>
                 <strong id="rgbHexValue">#000000</strong>
               </div>
             </div>
 
             <div class="fan-action-row">
-              <button class="btn btn-primary" id="applyRgbButton">Ap dung mau</button>
-              <button class="btn btn-secondary" id="turnOffRgbButton">Tat RGB</button>
+              <button class="btn btn-primary" id="applyRgbButton">Apply color</button>
+              <button class="btn btn-secondary" id="turnOffRgbButton">Turn off RGB</button>
             </div>
           </div>
 
@@ -229,19 +260,19 @@
             <div class="device-top">
               <div class="device-icon door">D</div>
               <div>
-                <h3>Dieu khien cua</h3>
-                <p>Mo hoac dong cua truc tiep tu web</p>
+                <h3>Door control</h3>
+                <p>Open or close the door directly from the web</p>
               </div>
             </div>
 
             <div class="device-status-row">
-              <span>Trang thai cua</span>
+              <span>Door status</span>
               <span id="doorState" class="status-badge off">--</span>
             </div>
 
             <div class="door-controls">
-              <button class="btn btn-success" id="openDoor">Mo cua</button>
-              <button class="btn btn-danger" id="closeDoor">Dong cua</button>
+              <button class="btn btn-success" id="openDoor">Open door</button>
+              <button class="btn btn-danger" id="closeDoor">Close door</button>
             </div>
           </div>
 
@@ -249,13 +280,13 @@
             <div class="device-top">
               <div class="device-icon fan">F</div>
               <div>
-                <h3>Dieu khien quat</h3>
-                <p>Bat tat va thay doi toc do quat</p>
+                <h3>Fan control</h3>
+                <p>Turn the fan on or off and adjust its speed</p>
               </div>
             </div>
 
             <div class="device-status-row">
-              <span>Trang thai</span>
+              <span>Status</span>
               <span id="fanState" class="status-badge off">OFF</span>
             </div>
 
@@ -266,7 +297,7 @@
 
             <div class="fan-speed-box">
               <div class="fan-speed-label">
-                <span>Toc do quat</span>
+                <span>Fan speed</span>
                 <strong id="fanSpeedValue">0%</strong>
               </div>
 
@@ -281,7 +312,7 @@
           <div>
             <p class="eyebrow">REMOTE BOARD</p>
             <h1>Remote Board Telemetry</h1>
-            <p class="subtext">Theo doi va dieu khien NeoPixel, cua va quat cua board giao tiep qua ESP-NOW.</p>
+            <p class="subtext">Monitor and control the NeoPixel, door, and fan of the peer board over ESP-NOW.</p>
           </div>
         </div>
 
@@ -291,7 +322,7 @@
               <div class="device-icon power">R</div>
               <div>
                 <h3 id="remoteBoardTitle">Remote Board</h3>
-                <p>ESP-NOW peer telemetry va dieu khien tu xa</p>
+                <p>ESP-NOW peer telemetry and remote control</p>
               </div>
             </div>
 
@@ -321,7 +352,7 @@
               <div class="device-icon lamp">T</div>
               <div>
                 <h3>Remote Sensors</h3>
-                <p>Du lieu moi nhan tu board giao tiep</p>
+                <p>Latest data received from the peer board</p>
               </div>
             </div>
 
@@ -346,18 +377,18 @@
               <div class="device-icon power">C</div>
               <div>
                 <h3>Pairing</h3>
-                <p>Nhap MAC cua board giao tiep de khoi dong lien ket ESP-NOW</p>
+                <p>Enter the peer board MAC to initialize the ESP-NOW link</p>
               </div>
             </div>
 
             <div class="form-group">
               <label for="peerMacInput">Peer MAC</label>
-              <input id="peerMacInput" type="text" placeholder="VD: 30:AE:A4:07:0D:64" />
+              <input id="peerMacInput" type="text" placeholder="e.g. 30:AE:A4:07:0D:64" />
             </div>
 
             <div class="door-controls">
-              <button class="btn btn-primary" id="savePeerMacButton">Luu Peer MAC</button>
-              <button class="btn btn-secondary" id="refreshEspNowButton">Lam moi</button>
+              <button class="btn btn-primary" id="savePeerMacButton">Save Peer MAC</button>
+              <button class="btn btn-secondary" id="refreshEspNowButton">Refresh</button>
             </div>
           </div>
 
@@ -366,30 +397,30 @@
               <div class="device-icon lamp">RGB</div>
               <div>
                 <h3>Remote NeoPixel</h3>
-                <p>Dieu khien den RGB ngoai vi cua board giao tiep qua ESP-NOW</p>
+                <p>Control the peer board's peripheral RGB LED over ESP-NOW</p>
               </div>
             </div>
 
             <div class="device-status-row">
-              <span>Trang thai</span>
+              <span>Status</span>
               <span id="remoteRgbState" class="status-badge off">OFF</span>
             </div>
 
             <div class="rgb-picker-wrap">
-              <label class="rgb-label" for="remoteRgbPicker">Mau LED</label>
+              <label class="rgb-label" for="remoteRgbPicker">LED color</label>
               <div class="rgb-picker-row">
                 <input id="remoteRgbPicker" type="color" value="#000000" />
                 <div id="remoteRgbPreview" class="rgb-preview"></div>
               </div>
               <div class="rgb-hex-row">
-                <span>Ma mau</span>
+                <span>Color code</span>
                 <strong id="remoteRgbHexValue">#000000</strong>
               </div>
             </div>
 
             <div class="fan-action-row">
-              <button class="btn btn-primary" id="applyRemoteRgbButton">Gui mau</button>
-              <button class="btn btn-secondary" id="turnOffRemoteRgbButton">Tat RGB</button>
+              <button class="btn btn-primary" id="applyRemoteRgbButton">Send color</button>
+              <button class="btn btn-secondary" id="turnOffRemoteRgbButton">Turn off RGB</button>
             </div>
           </div>
 
@@ -398,18 +429,18 @@
               <div class="device-icon door">D</div>
               <div>
                 <h3>Remote Door</h3>
-                <p>Dieu khien cua cua board giao tiep</p>
+                <p>Control the peer board's door</p>
               </div>
             </div>
 
             <div class="device-status-row">
-              <span>Trang thai</span>
+              <span>Status</span>
               <span id="remoteDoorState" class="status-badge off">--</span>
             </div>
 
             <div class="door-controls">
-              <button class="btn btn-success" id="openRemoteDoor">Mo cua</button>
-              <button class="btn btn-danger" id="closeRemoteDoor">Dong cua</button>
+              <button class="btn btn-success" id="openRemoteDoor">Open door</button>
+              <button class="btn btn-danger" id="closeRemoteDoor">Close door</button>
             </div>
           </div>
 
@@ -418,12 +449,12 @@
               <div class="device-icon fan">F</div>
               <div>
                 <h3>Remote Fan</h3>
-                <p>Bat tat va thay doi toc do quat tu xa</p>
+                <p>Turn the fan on/off and change its speed remotely</p>
               </div>
             </div>
 
             <div class="device-status-row">
-              <span>Trang thai</span>
+              <span>Status</span>
               <span id="remoteFanState" class="status-badge off">OFF</span>
             </div>
 
@@ -434,7 +465,7 @@
 
             <div class="fan-speed-box">
               <div class="fan-speed-label">
-                <span>Toc do quat</span>
+                <span>Fan speed</span>
                 <strong id="remoteFanSpeedValue">0%</strong>
               </div>
 
@@ -448,22 +479,22 @@
         <div class="section-head">
           <div>
             <p class="eyebrow">SYSTEM INFORMATION</p>
-            <h1>Thong tin he thong</h1>
-            <p class="subtext">Thong tin co ban ve dia chi truy cap va che do hoat dong hien tai cua ESP32.</p>
+            <h1>System information</h1>
+            <p class="subtext">Basic information about the access address and current operating mode of the ESP32.</p>
           </div>
         </div>
 
         <div class="info-grid">
           <div class="card info-card glass">
-            <p class="card-label">Dia chi truy cap</p>
+            <p class="card-label">Access address</p>
             <h3 id="deviceIp">--</h3>
-            <p>Dia chi hien tai de truy cap giao dien web tu dien thoai hoac may tinh.</p>
+            <p>The current address used to open the web interface from a phone or computer.</p>
           </div>
 
           <div class="card info-card glass">
-            <p class="card-label">Che do mang</p>
+            <p class="card-label">Network mode</p>
             <h3>Access Point / Station</h3>
-            <p>ESP32 co the phat AP rieng hoac ket noi vao WiFi san co.</p>
+            <p>The ESP32 can host its own AP or connect to an existing WiFi network.</p>
           </div>
         </div>
       </section>
@@ -472,40 +503,40 @@
         <div class="section-head">
           <div>
             <p class="eyebrow">WIFI CONFIGURATION</p>
-            <h1>Cau hinh WiFi</h1>
-            <p class="subtext">Chon nhanh mang WiFi va gui cau hinh sang ESP32.</p>
+            <h1>WiFi settings</h1>
+            <p class="subtext">Quickly choose a WiFi network and send the configuration to the ESP32.</p>
           </div>
-          <button class="btn btn-secondary" id="scanWifiButton">Quet lai WiFi</button>
+          <button class="btn btn-secondary" id="scanWifiButton">Rescan WiFi</button>
         </div>
 
         <div class="settings-layout">
           <div class="card glass wifi-panel">
             <div class="panel-head">
-              <h3>Mang WiFi kha dung</h3>
-              <p>Cham vao mot mang de tu dong dien SSID.</p>
+              <h3>Available WiFi networks</h3>
+              <p>Tap a network to auto-fill the SSID.</p>
             </div>
             <div class="wifi-list" id="wifiList"></div>
           </div>
 
           <div class="card glass settings-card">
             <div class="panel-head">
-              <h3>Ket noi mang</h3>
-              <p>Nhap thong tin WiFi de chuyen sang STA mode.</p>
+              <h3>Connect to network</h3>
+              <p>Enter WiFi details to switch to STA mode.</p>
             </div>
 
             <form id="settingsForm">
               <div class="form-group">
-                <label for="ssid">Ten WiFi (SSID)</label>
-                <input type="text" id="ssid" placeholder="Nhap ten WiFi" required />
+                <label for="ssid">WiFi name (SSID)</label>
+                <input type="text" id="ssid" placeholder="Enter WiFi name" required />
               </div>
 
               <div class="form-group">
-                <label for="password">Mat khau</label>
-                <input type="password" id="password" placeholder="Nhap mat khau WiFi" />
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Enter WiFi password" />
               </div>
 
               <div class="form-actions">
-                <button type="submit" class="btn btn-primary btn-large">Ket noi WiFi</button>
+                <button type="submit" class="btn btn-primary btn-large">Connect WiFi</button>
               </div>
             </form>
           </div>
@@ -516,24 +547,24 @@
         <div class="section-head">
           <div>
             <p class="eyebrow">CAMERA DETECTION</p>
-            <h1>Camera MNIST tren bien</h1>
+            <h1>Edge MNIST camera</h1>
             <p class="subtext">
-              Browser hien thi stream tu PC, con ESP32 se tu lay snapshot de chay nhan dien chu so.
+              The browser shows the PC stream while the ESP32 takes snapshots to run digit recognition.
             </p>
           </div>
         </div>
 
         <div class="device-grid">
           <div class="card glass">
-            <h3 class="camera-title">Ket noi Camera PC</h3>
+            <h3 class="camera-title">Connect PC camera</h3>
             <div class="camera-input-row">
-              <input id="pcIpInput" type="text" placeholder="VD: 192.168.1.100:5000" class="camera-input" />
+              <input id="pcIpInput" type="text" placeholder="e.g. 192.168.1.100:5000" class="camera-input" />
             </div>
 
             <div class="camera-action-row">
-              <button class="btn btn-primary" id="savePcIpButton">Luu IP</button>
-              <button class="btn btn-success" id="connectCameraButton">Ket noi stream</button>
-              <button class="btn btn-danger" id="disconnectCameraButton">Ngat</button>
+              <button class="btn btn-primary" id="savePcIpButton">Save IP</button>
+              <button class="btn btn-success" id="connectCameraButton">Connect stream</button>
+              <button class="btn btn-danger" id="disconnectCameraButton">Disconnect</button>
             </div>
 
             <div class="camera-input-row">
@@ -541,12 +572,12 @@
             </div>
 
             <div class="camera-action-row">
-              <button class="btn btn-secondary" id="useCameraSourceButton">Dung webcam</button>
-              <button class="btn btn-primary" id="uploadImageButton">Tai anh test</button>
-              <button class="btn btn-success" id="captureFrameButton">Chup de detect</button>
+              <button class="btn btn-secondary" id="useCameraSourceButton">Use webcam</button>
+              <button class="btn btn-primary" id="uploadImageButton">Upload test image</button>
+              <button class="btn btn-success" id="captureFrameButton">Capture for detection</button>
             </div>
 
-            <p id="camStatus" class="camera-status-text">Trang thai: Chua ket noi</p>
+            <p id="camStatus" class="camera-status-text">Status: Disconnected</p>
           </div>
 
           <div class="card glass camera-mnist-card">
@@ -573,7 +604,7 @@
                   <span>Source</span>
                   <strong id="mnistSource">--</strong>
                 </div>
-                <p id="mnistStatusText" class="tinyml-desc">ESP32 dang cho cau hinh camera.</p>
+                <p id="mnistStatusText" class="tinyml-desc">The ESP32 is waiting for camera configuration.</p>
               </div>
             </div>
           </div>

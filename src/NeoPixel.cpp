@@ -9,7 +9,7 @@
 #endif
 
 #ifndef RGB_LED_COUNT
-#define RGB_LED_COUNT 1
+#define RGB_LED_COUNT 4
 #endif
 
 #ifndef RGB_BRIGHTNESS

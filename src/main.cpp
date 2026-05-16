@@ -51,6 +51,9 @@ void setup()
   ctx->temperature = 0.0f;
   ctx->humidity = 0.0f;
   ctx->tinymlScore = 0.0f;
+  ctx->tinymlProbNormal = 0.0f;
+  ctx->tinymlProbThreshold = 0.0f;
+  ctx->tinymlProbSpike = 0.0f;
   ctx->mnistConfidence = 0.0f;
   ctx->remoteTemperature = 0.0f;
   ctx->remoteHumidity = 0.0f;
