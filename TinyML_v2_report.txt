@@ -1,0 +1,9 @@
+                   precision    recall  f1-score   support
+
+           normal       1.00      1.00      1.00       168
+threshold_anomaly       0.95      1.00      0.97        36
+    spike_anomaly       1.00      0.94      0.97        36
+
+         accuracy                           0.99       240
+        macro avg       0.98      0.98      0.98       240
+     weighted avg       0.99      0.99      0.99       240
