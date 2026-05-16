@@ -243,6 +243,13 @@ String buildUnifiedStateJson(AppContext *ctx)
     xSemaphoreGive(ctx->configMutex);
   }
 
+  if (localMac.isEmpty())
+  {
+    const String wifiMac = WiFi.macAddress();
+    if (!wifiMac.isEmpty())
+      localMac = wifiMac;
+  }
+
   String json = "{";
   json += "\"door\":\"" + String(doorOpen ? "open" : "closed") + "\",";
   json += "\"fan_on\":" + boolToJson(fanOn) + ",";

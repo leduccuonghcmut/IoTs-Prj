@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
+#include <esp_mac.h>
 
 #include "mainserver.h"
 
@@ -57,6 +58,23 @@ String formatMacAddress(const uint8_t mac[6])
     snprintf(buffer, sizeof(buffer), "%02X:%02X:%02X:%02X:%02X:%02X",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     return String(buffer);
+}
+
+String readLocalMacText()
+{
+    uint8_t mac[6] = {0};
+
+    if (esp_wifi_get_mac(WIFI_IF_STA, mac) == ESP_OK)
+    {
+        return formatMacAddress(mac);
+    }
+
+    if (esp_read_mac(mac, ESP_MAC_WIFI_STA) == ESP_OK)
+    {
+        return formatMacAddress(mac);
+    }
+
+    return "";
 }
 
 bool refreshPeerRegistration()
@@ -316,15 +334,11 @@ bool initEspNow(AppContext *ctx)
     esp_now_register_send_cb(onDataSent);
     esp_now_register_recv_cb(onDataRecv);
 
-    uint8_t localMac[6] = {0};
-    if (esp_wifi_get_mac(WIFI_IF_STA, localMac) == ESP_OK)
+    const String localMacText = readLocalMacText();
+    if (!localMacText.isEmpty() && ctx != nullptr && ctx->configMutex != nullptr && xSemaphoreTake(ctx->configMutex, portMAX_DELAY) == pdTRUE)
     {
-        const String localMacText = formatMacAddress(localMac);
-        if (ctx != nullptr && ctx->configMutex != nullptr && xSemaphoreTake(ctx->configMutex, portMAX_DELAY) == pdTRUE)
-        {
-            ctx->localMac = localMacText;
-            xSemaphoreGive(ctx->configMutex);
-        }
+        ctx->localMac = localMacText;
+        xSemaphoreGive(ctx->configMutex);
     }
 
     if (ctx != nullptr && ctx->stateMutex != nullptr && xSemaphoreTake(ctx->stateMutex, portMAX_DELAY) == pdTRUE)
