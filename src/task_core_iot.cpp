@@ -14,6 +14,7 @@ constexpr float kHighTempThreshold = 50.0f;
 constexpr float kLowTempThreshold = 30.0f;
 constexpr size_t kMqttBufferSize = 1024U;
 constexpr uint8_t kRuleRelayIndex = 1U;
+constexpr uint8_t kLedWhiteValue = 255U;
 
 constexpr const char *kTelemetryTopic = "v1/devices/me/telemetry";
 constexpr const char *kAttributesTopic = "v1/devices/me/attributes";
@@ -144,16 +145,23 @@ void publishRuntimeSnapshot(AppContext *ctx, float temperature, float humidity)
     telemetry["mnist_digit"] = mnistDigit;
     telemetry["relay1"] = relay1On;
     telemetry["relay2"] = relay2On;
+    telemetry["led_state"] = rgbOn;
     telemetry["door"] = doorOpen ? "open" : "closed";
+    telemetry["door_open"] = doorOpen;
     telemetry["fan"] = fanOn ? "ON" : "OFF";
+    telemetry["fan_state"] = fanOn;
     telemetry["fan_speed"] = fanSpeed;
     telemetry["rgb_on"] = rgbOn;
     telemetry["rgb_red"] = rgbRed;
     telemetry["rgb_green"] = rgbGreen;
     telemetry["rgb_blue"] = rgbBlue;
+    telemetry["rgb_r"] = rgbRed;
+    telemetry["rgb_g"] = rgbGreen;
+    telemetry["rgb_b"] = rgbBlue;
     telemetry["macAddress"] = localMac;
     telemetry["localIp"] = WiFi.localIP().toString();
     telemetry["ssid"] = WiFi.SSID();
+    telemetry["rssi"] = WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0;
     publishJson(kTelemetryTopic, telemetry);
 }
 
@@ -197,6 +205,94 @@ bool parseBoolLike(const JsonVariantConst &value, bool &result)
     return false;
 }
 
+bool parseUint8Like(const JsonVariantConst &value, uint8_t &result)
+{
+    long parsedValue = 0;
+
+    if (value.is<int>())
+    {
+        parsedValue = value.as<int>();
+    }
+    else if (value.is<float>())
+    {
+        parsedValue = lroundf(value.as<float>());
+    }
+    else if (value.is<const char *>())
+    {
+        String text = value.as<const char *>();
+        text.trim();
+        if (text.isEmpty())
+            return false;
+
+        char *endPtr = nullptr;
+        parsedValue = strtol(text.c_str(), &endPtr, 10);
+        if (endPtr == nullptr || *endPtr != '\0')
+            return false;
+    }
+    else
+    {
+        return false;
+    }
+
+    if (parsedValue < 0)
+        parsedValue = 0;
+    if (parsedValue > 255)
+        parsedValue = 255;
+
+    result = static_cast<uint8_t>(parsedValue);
+    return true;
+}
+
+bool parseRgbLike(const JsonVariantConst &value, uint8_t &red, uint8_t &green, uint8_t &blue)
+{
+    if (!value.is<JsonObjectConst>())
+        return false;
+
+    const JsonObjectConst object = value.as<JsonObjectConst>();
+    uint8_t parsedRed = 0;
+    uint8_t parsedGreen = 0;
+    uint8_t parsedBlue = 0;
+
+    if (!parseUint8Like(object["r"], parsedRed))
+        return false;
+    if (!parseUint8Like(object["g"], parsedGreen))
+        return false;
+    if (!parseUint8Like(object["b"], parsedBlue))
+        return false;
+
+    red = parsedRed;
+    green = parsedGreen;
+    blue = parsedBlue;
+    return true;
+}
+
+bool parseDoorLike(const JsonVariantConst &value, bool &open)
+{
+    if (parseBoolLike(value, open))
+        return true;
+
+    if (value.is<const char *>())
+    {
+        String text = value.as<const char *>();
+        text.trim();
+        text.toUpperCase();
+
+        if (text == "OPEN")
+        {
+            open = true;
+            return true;
+        }
+
+        if (text == "CLOSE" || text == "CLOSED")
+        {
+            open = false;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void sendRpcResponse(const String &requestId, bool ok, const String &message)
 {
     if (requestId.isEmpty() || !g_mqttClient.connected())
@@ -205,6 +301,39 @@ void sendRpcResponse(const String &requestId, bool ok, const String &message)
     DynamicJsonDocument doc(256);
     doc["ok"] = ok;
     doc["message"] = message;
+
+    const String topic = makeRpcResponseTopic(requestId);
+    publishJson(topic.c_str(), doc);
+}
+
+void sendRpcBoolResponse(const String &requestId, bool value)
+{
+    if (requestId.isEmpty() || !g_mqttClient.connected())
+        return;
+
+    const String topic = makeRpcResponseTopic(requestId);
+    g_mqttClient.publish(topic.c_str(), value ? "true" : "false");
+}
+
+void sendRpcIntResponse(const String &requestId, int value)
+{
+    if (requestId.isEmpty() || !g_mqttClient.connected())
+        return;
+
+    const String topic = makeRpcResponseTopic(requestId);
+    const String payload = String(value);
+    g_mqttClient.publish(topic.c_str(), payload.c_str());
+}
+
+void sendRpcRgbResponse(const String &requestId, uint8_t red, uint8_t green, uint8_t blue)
+{
+    if (requestId.isEmpty() || !g_mqttClient.connected())
+        return;
+
+    DynamicJsonDocument doc(128);
+    doc["r"] = red;
+    doc["g"] = green;
+    doc["b"] = blue;
 
     const String topic = makeRpcResponseTopic(requestId);
     publishJson(topic.c_str(), doc);
@@ -227,6 +356,12 @@ void handleRpcCommand(const String &topic, const JsonDocument &doc)
     const JsonVariantConst params = doc["params"];
     const String requestId = extractRequestId(topic);
     bool powerOn = false;
+    bool fanOn = false;
+    bool doorOpen = false;
+    uint8_t fanSpeed = 0;
+    uint8_t red = 0;
+    uint8_t green = 0;
+    uint8_t blue = 0;
 
     if (method.equalsIgnoreCase("POWER") || method.equalsIgnoreCase("setValue"))
     {
@@ -265,6 +400,189 @@ void handleRpcCommand(const String &topic, const JsonDocument &doc)
 
         local_set_relay(g_ctx, 2, powerOn);
         sendRpcResponse(requestId, true, powerOn ? "RELAY2 ON" : "RELAY2 OFF");
+        return;
+    }
+
+    if (method.equalsIgnoreCase("setLed") || method.equalsIgnoreCase("setStateLED"))
+    {
+        if (params.is<JsonObjectConst>())
+        {
+            if (!parseBoolLike(params["value"], powerOn))
+            {
+                sendRpcResponse(requestId, false, "Invalid LED parameter");
+                return;
+            }
+        }
+        else if (!parseBoolLike(params, powerOn))
+        {
+            sendRpcResponse(requestId, false, "Invalid LED parameter");
+            return;
+        }
+
+        local_set_rgb(
+            g_ctx,
+            powerOn ? kLedWhiteValue : 0,
+            powerOn ? kLedWhiteValue : 0,
+            powerOn ? kLedWhiteValue : 0);
+        sendRpcResponse(requestId, true, powerOn ? "LED ON" : "LED OFF");
+        return;
+    }
+
+    if (method.equalsIgnoreCase("getLed"))
+    {
+        bool ledState = false;
+        if (g_ctx->stateMutex != nullptr && xSemaphoreTake(g_ctx->stateMutex, pdMS_TO_TICKS(100)) == pdTRUE)
+        {
+            ledState = g_ctx->rgbLedOn;
+            xSemaphoreGive(g_ctx->stateMutex);
+        }
+
+        sendRpcBoolResponse(requestId, ledState);
+        return;
+    }
+
+    if (method.equalsIgnoreCase("setFan"))
+    {
+        if (params.is<JsonObjectConst>())
+        {
+            if (!parseBoolLike(params["value"], fanOn))
+            {
+                sendRpcResponse(requestId, false, "Invalid FAN parameter");
+                return;
+            }
+        }
+        else if (!parseBoolLike(params, fanOn))
+        {
+            sendRpcResponse(requestId, false, "Invalid FAN parameter");
+            return;
+        }
+
+        uint8_t currentSpeed = 100;
+        if (g_ctx->stateMutex != nullptr && xSemaphoreTake(g_ctx->stateMutex, pdMS_TO_TICKS(100)) == pdTRUE)
+        {
+            currentSpeed = g_ctx->fanSpeed == 0 ? 100 : g_ctx->fanSpeed;
+            xSemaphoreGive(g_ctx->stateMutex);
+        }
+
+        local_set_fan(g_ctx, fanOn, fanOn ? currentSpeed : 0);
+        sendRpcResponse(requestId, true, fanOn ? "FAN ON" : "FAN OFF");
+        return;
+    }
+
+    if (method.equalsIgnoreCase("getFan"))
+    {
+        if (g_ctx->stateMutex != nullptr && xSemaphoreTake(g_ctx->stateMutex, pdMS_TO_TICKS(100)) == pdTRUE)
+        {
+            fanOn = g_ctx->fanOn;
+            xSemaphoreGive(g_ctx->stateMutex);
+        }
+
+        sendRpcBoolResponse(requestId, fanOn);
+        return;
+    }
+
+    if (method.equalsIgnoreCase("setDoor"))
+    {
+        if (params.is<JsonObjectConst>())
+        {
+            const JsonObjectConst object = params.as<JsonObjectConst>();
+            if (!object["value"].isNull())
+            {
+                if (!parseDoorLike(object["value"], doorOpen))
+                {
+                    sendRpcResponse(requestId, false, "Invalid DOOR parameter");
+                    return;
+                }
+            }
+            else if (!parseDoorLike(object["state"], doorOpen))
+            {
+                sendRpcResponse(requestId, false, "Invalid DOOR parameter");
+                return;
+            }
+        }
+        else if (!parseDoorLike(params, doorOpen))
+        {
+            sendRpcResponse(requestId, false, "Invalid DOOR parameter");
+            return;
+        }
+
+        local_set_door(g_ctx, doorOpen);
+        sendRpcResponse(requestId, true, doorOpen ? "DOOR OPEN" : "DOOR CLOSED");
+        return;
+    }
+
+    if (method.equalsIgnoreCase("getDoor"))
+    {
+        if (g_ctx->stateMutex != nullptr && xSemaphoreTake(g_ctx->stateMutex, pdMS_TO_TICKS(100)) == pdTRUE)
+        {
+            doorOpen = g_ctx->doorOpen;
+            xSemaphoreGive(g_ctx->stateMutex);
+        }
+
+        sendRpcBoolResponse(requestId, doorOpen);
+        return;
+    }
+
+    if (method.equalsIgnoreCase("setFanSpeed"))
+    {
+        if (params.is<JsonObjectConst>())
+        {
+            if (!parseUint8Like(params["value"], fanSpeed))
+            {
+                sendRpcResponse(requestId, false, "Invalid FAN SPEED parameter");
+                return;
+            }
+        }
+        else if (!parseUint8Like(params, fanSpeed))
+        {
+            sendRpcResponse(requestId, false, "Invalid FAN SPEED parameter");
+            return;
+        }
+
+        if (fanSpeed > 100)
+            fanSpeed = 100;
+
+        local_set_fan(g_ctx, fanSpeed > 0, fanSpeed);
+        sendRpcResponse(requestId, true, "FAN SPEED " + String(fanSpeed));
+        return;
+    }
+
+    if (method.equalsIgnoreCase("getFanSpeed"))
+    {
+        if (g_ctx->stateMutex != nullptr && xSemaphoreTake(g_ctx->stateMutex, pdMS_TO_TICKS(100)) == pdTRUE)
+        {
+            fanSpeed = g_ctx->fanSpeed;
+            xSemaphoreGive(g_ctx->stateMutex);
+        }
+
+        sendRpcIntResponse(requestId, fanSpeed);
+        return;
+    }
+
+    if (method.equalsIgnoreCase("setRgb"))
+    {
+        if (!parseRgbLike(params, red, green, blue))
+        {
+            sendRpcResponse(requestId, false, "Invalid RGB parameter");
+            return;
+        }
+
+        local_set_rgb(g_ctx, red, green, blue);
+        sendRpcResponse(requestId, true, "RGB updated");
+        return;
+    }
+
+    if (method.equalsIgnoreCase("getRgb"))
+    {
+        if (g_ctx->stateMutex != nullptr && xSemaphoreTake(g_ctx->stateMutex, pdMS_TO_TICKS(100)) == pdTRUE)
+        {
+            red = g_ctx->rgbRed;
+            green = g_ctx->rgbGreen;
+            blue = g_ctx->rgbBlue;
+            xSemaphoreGive(g_ctx->stateMutex);
+        }
+
+        sendRpcRgbResponse(requestId, red, green, blue);
         return;
     }
 

@@ -6,7 +6,7 @@
 #include "temp_humi_monitor.h"
 #include "mainserver.h"
 #include "tinyml.h"
-// #include "camera_mnist_task.h"
+#include "camera_mnist_task.h"
 #include "espnow_link.h"
 #include "lcd_display_task.h"
 #include "task_check_info.h"
@@ -69,7 +69,7 @@ void setup()
   ctx->remoteLastSeenMs = 0;
   ctx->espNowPacketsRx = 0;
   ctx->espNowPacketsTx = 0;
-  ctx->coreIotToken = "y8m225l6zv297aarday2";
+  ctx->coreIotToken = "wjlbjhro9k1f2b5f6t0b";
   ctx->coreIotServer = "app.coreiot.io";
   ctx->coreIotPort = "1883";
   ctx->cameraHost = "";
@@ -92,7 +92,7 @@ void setup()
   xTaskCreate(main_server_task, "Task Main Server", 8192, ctx, 2, NULL);
   xTaskCreate(espnow_link_task, "ESP-NOW Link", 8192, ctx, 2, NULL);
   xTaskCreate(tiny_ml_task, "Tiny ML Task", 8192, ctx, 2, NULL);
-  // xTaskCreate(camera_mnist_task, "Camera MNIST Task", 16384, ctx, 2, NULL);
+  xTaskCreate(camera_mnist_task, "Camera MNIST Task", 16384, ctx, 2, NULL);
   xTaskCreate(coreiot_thingsboard_task, "CoreIOT Task", 8192, ctx, 2, NULL);
   xTaskCreate(led_blinky, "Task LED Blink", 2048, ctx, 2, NULL);
   xTaskCreate(neo_blinky, "Task NEO Blink", 2048, ctx, 2, NULL);
